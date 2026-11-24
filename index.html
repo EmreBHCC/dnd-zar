@@ -501,7 +501,7 @@ function simulate(dice, hx, hz) {
         s.ground = v.y === 0;
       }
       if (s.ground) {                                   // sürtünme + yuvarlanma bağı
-        const f = Math.exp(-(k > 360 ? 3 : .6) * DT), sp = Math.hypot(v.x, v.z), ns = Math.max(0, sp * f - (sp < 3.2 ? 4.2 : 2) * DT);   // son duruşta zar çabuk durur
+        const f = Math.exp(-(k > 360 ? 3 : .6) * DT), sp = Math.hypot(v.x, v.z), ns = Math.max(0, sp * f - (sp < 4.5 ? 7 : 2) * DT);   // son duruşta zar çabuk durur
         if (sp > 1e-6) { v.x *= ns / sp; v.z *= ns / sp; }
         const R0 = .85, tw = V3(v.z / R0, 0, -v.x / R0);   // Y × v / R
         w.lerp(tw, Math.min(1, 9 * DT));
