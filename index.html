@@ -18,7 +18,8 @@
   .panel { position: absolute; right: 0; top: calc(100% + 6px); z-index: 5; background: var(--panel); border: 1px solid var(--line);
            border-radius: 10px; padding: 12px 14px; box-shadow: 0 10px 30px rgba(0,0,0,.5); min-width: 220px; }
   .panel[hidden] { display: none; }
-  .panel h2 { margin-bottom: 10px; }
+  .panel h2 { margin: 14px 0 8px; }
+  .panel h2:first-child { margin-top: 0; }
   h1 { margin: 0; font-size: 1.3rem; letter-spacing: .04em; font-weight: 600; }
   h1 span { color: var(--dim); font-weight: 400; font-size: .9rem; margin-left: .6em; }
   section { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 14px; }
@@ -109,6 +110,10 @@
       <div class="panel" id="setPanel" hidden>
         <h2>Masa rengi</h2>
         <div class="swatches" id="swatches" role="group" aria-label="Masa rengi"></div>
+        <h2>Zar rengi</h2>
+        <div class="swatches" id="swBody" role="group" aria-label="Zar rengi"></div>
+        <h2>Yazı rengi</h2>
+        <div class="swatches" id="swInk" role="group" aria-label="Yazı rengi"></div>
         </div>
     </div>
   </header>
@@ -358,22 +363,23 @@ function assign(cl, sides) {
 
 const texCache = {};
 function labelTex(text) {
-  if (texCache[text]) return texCache[text];
+  const ck = inkKey + '|' + text;
+  if (texCache[ck]) return texCache[ck];
   const c = document.createElement('canvas'); c.width = c.height = 128;
   const x = c.getContext('2d');
-  x.fillStyle = '#f4d37a'; x.textAlign = 'center'; x.textBaseline = 'middle';
+  x.fillStyle = INKS[inkKey]; x.textAlign = 'center'; x.textBaseline = 'middle';
   x.font = `800 ${text.length > 1 ? 62 : 88}px system-ui, sans-serif`;
   x.fillText(text, 64, 62);
   if (text === '6' || text === '9') x.fillRect(44, 112, 40, 8);   // 6 ile 9 karışmasın
   const t = new THREE.CanvasTexture(c); t.anisotropy = 4; t.colorSpace = THREE.SRGBColorSpace;
-  return (texCache[text] = t);
+  return (texCache[ck] = t);
 }
 
 function makeDie(sides, tens) {
   const geo = nonIdx(GEO[sides]());
   const cl = faces(geo), vals = assign(cl, sides);
   const grp = new THREE.Group();
-  const mat = new THREE.MeshStandardMaterial({ color: 0x7c2b22, roughness: .4, metalness: .12, flatShading: true });
+  const mat = new THREE.MeshStandardMaterial({ color: BODIES[bodyKey], roughness: .4, metalness: .12, flatShading: true });
   const body = new THREE.Mesh(geo, mat); body.castShadow = true; grp.add(body);
   const frames = {};
   cl.forEach((f, i) => {
@@ -392,6 +398,7 @@ function makeDie(sides, tens) {
     const m = new THREE.Mesh(new THREE.PlaneGeometry(size, size),
       new THREE.MeshBasicMaterial({ map: labelTex(text), transparent: true, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2 }));
     m.position.copy(f.c).addScaledVector(n, .006);
+    m.userData.text = text;
     m.quaternion.copy(q);
     grp.add(m);
     frames[vals[i]] = { q };
@@ -406,6 +413,7 @@ function makeDie(sides, tens) {
       const m = new THREE.Mesh(new THREE.PlaneGeometry(.5, .5),
         new THREE.MeshBasicMaterial({ map: labelTex(String(k + 1)), transparent: true, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2 }));
       m.position.copy(f.c).addScaledVector(p.clone().sub(f.c), .58).addScaledVector(f.n, .006);
+      m.userData.text = String(k + 1);
       m.quaternion.copy(q); grp.add(m);
     }));
     const yaw = new THREE.Quaternion().setFromAxisAngle(V3(0, 1, 0), Math.random() * 6.28);
@@ -416,6 +424,11 @@ function makeDie(sides, tens) {
 
 let R = null, keyLight = null;
 const TABLES = { yesil: '#1f4a33', lacivert: '#1d2b44', bordo: '#4a1d24', siyah: '#1c1c20', ahsap: '#6b4a2e' };
+const BODIES = { kirmizi: '#7c2b22', mavi: '#25498c', yesil: '#2b6a3e', mor: '#5a3a8e', siyah: '#202024', fildisi: '#e6dcc8' };
+const INKS = { altin: '#f4d37a', beyaz: '#ffffff', siyah: '#15151a', gumus: '#c9d1dc', kirmizi: '#d9584a' };
+let bodyKey = localStorage.getItem('zarGovde'), inkKey = localStorage.getItem('zarYazi');
+if (!BODIES[bodyKey]) bodyKey = 'kirmizi';
+if (!INKS[inkKey]) inkKey = 'altin';
 let tableKey = localStorage.getItem('zarMasa');
 if (!TABLES[tableKey]) tableKey = 'lacivert';
 function feltTexture(base) {
@@ -710,20 +723,35 @@ $('clearH').onclick = () => { hist.length = 0; drawHist(); };
 function applyTable() {
   const base = TABLES[tableKey];
   $('stage').style.background = base;
-  document.querySelectorAll('.sw').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.k === tableKey)));
   if (R) {
     R.table.material.map = feltTexture(base); R.table.material.needsUpdate = true;
     R.scene.fog.color.set(base);
     if (R.dice.length) R.renderer.render(R.scene, R.camera);
   }
 }
-Object.keys(TABLES).forEach(k => {
-  const b = document.createElement('button');
-  b.type = 'button'; b.className = 'sw'; b.dataset.k = k; b.title = 'Masa: ' + k; b.setAttribute('aria-label', 'Masa rengi: ' + k);
-  b.style.background = TABLES[k];
-  b.onclick = () => { tableKey = k; localStorage.setItem('zarMasa', k); applyTable(); };
-  $('swatches').appendChild(b);
-});
+function restyle() {   // masadaki zarları anında yeni renklere çevir
+  if (!R) return;
+  R.dice.forEach(d => {
+    d.mat.color.set(BODIES[bodyKey]);
+    d.grp.children.forEach(m => { if (m.userData.text) { m.material.map = labelTex(m.userData.text); m.material.needsUpdate = true; } });
+  });
+  if (R.dice.length) R.renderer.render(R.scene, R.camera);
+}
+function mkSwatches(id, map, get, set, label) {
+  const box = $(id);
+  const mark = () => box.querySelectorAll('.sw').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.k === get())));
+  Object.keys(map).forEach(k => {
+    const b = document.createElement('button');
+    b.type = 'button'; b.className = 'sw'; b.dataset.k = k; b.title = label + ': ' + k; b.setAttribute('aria-label', label + ': ' + k);
+    b.style.background = map[k];
+    b.onclick = () => { set(k); mark(); };
+    box.appendChild(b);
+  });
+  mark();
+}
+mkSwatches('swatches', TABLES, () => tableKey, k => { tableKey = k; localStorage.setItem('zarMasa', k); applyTable(); }, 'Masa');
+mkSwatches('swBody', BODIES, () => bodyKey, k => { bodyKey = k; localStorage.setItem('zarGovde', k); restyle(); }, 'Zar');
+mkSwatches('swInk', INKS, () => inkKey, k => { inkKey = k; localStorage.setItem('zarYazi', k); restyle(); }, 'Yazı');
 applyTable();
 const setBtn = $('setBtn'), setPanel = $('setPanel');
 function togglePanel(open) {
