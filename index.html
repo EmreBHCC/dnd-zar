@@ -57,23 +57,8 @@
   .result { text-align: center; padding: 8px 0 2px; }
   .bonus { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; flex: 1 1 100%; }
   .seg button { min-width: 38px; }
-  .stage { display: flex; flex-wrap: wrap; gap: 10px; justify-content: center; align-items: flex-end;
-           min-height: 84px; padding: 10px 0 4px; overflow: hidden; }
-  .sd { width: 70px; height: 70px; will-change: transform; filter: drop-shadow(0 8px 6px rgba(0,0,0,.55)); }
-  .sd polygon { fill: #3a2a1e; stroke: var(--gold); stroke-width: 3; stroke-linejoin: round; }
-  .sd text { fill: var(--ink); font: 800 24px system-ui; text-anchor: middle; dominant-baseline: central; }
-  .sd.rolling { animation: tumble 1s cubic-bezier(.3,.6,.4,1) both; animation-delay: var(--dl, 0s); }
-  .sd.max polygon { stroke: #fff3d0; fill: #5a4216; }
-  .sd.min polygon { stroke: var(--red); }
-  .sd.drop { opacity: .35; }
-  @keyframes tumble {
-    0%   { transform: translate(var(--x, 0), -130px) rotate(0deg) scale(.7); opacity: 0; }
-    22%  { opacity: 1; transform: translate(var(--x, 0), 0) rotate(calc(var(--r) * .4)) scale(1); }
-    42%  { transform: translate(var(--x, 0), -42px) rotate(calc(var(--r) * .68)); }
-    62%  { transform: translate(0, 0) rotate(calc(var(--r) * .88)); }
-    78%  { transform: translate(0, -12px) rotate(calc(var(--r) * .97)); }
-    100% { transform: translate(0, 0) rotate(var(--r)); }
-  }
+  .stage { position: relative; width: 100%; height: 190px; }
+  .stage canvas { display: block; width: 100%; height: 100%; }
   .total { font-size: 4.2rem; font-weight: 800; line-height: 1; font-variant-numeric: tabular-nums; }
   .total.crit { color: var(--gold); }
   .total.fumble { color: var(--red); }
@@ -94,6 +79,7 @@
   #hist b { font-variant-numeric: tabular-nums; }
   #hist .crit { color: var(--gold); } #hist .fumble { color: var(--red); }
   .empty-h { color: var(--dim); font-size: .9rem; }
+  .hint { flex: 1 1 100%; color: var(--dim); font-size: .78rem; }
   .err { color: var(--red); font-size: .85rem; flex: 1 1 100%; min-height: 1.2em; }
 
   @media (max-width: 760px) { main { grid-template-columns: 1fr; } aside { grid-column: 1; grid-row: auto; } }
@@ -131,6 +117,7 @@
       </div>
       <button type="button" class="btn" id="clear">Temizle</button>
       <input type="text" id="expr" placeholder="ya da yaz: 2d6+1d8+3" aria-label="Zar ifadesi" autocomplete="off">
+      <div class="hint">Avantaj/dezavantaj yalnız d20 içindir: havuzda <b>tek d20</b> olunca açılır; ikinci bir d20 atılır, yüksek/düşük olan sayılır. Diğer zarlar (hasar, Bless d4) normal atılır. 2d20 eklemek avantaj değil, toplamdır.</div>
       <div class="err" id="err"></div>
       <button type="button" id="roll">ZAR AT</button>
     </div>
@@ -155,6 +142,7 @@
   </aside>
 </main>
 
+<script src="vendor/three.min.js"></script>
 <script>
 const SIDES = [4, 6, 8, 10, 12, 20, 100];
 const SHAPES = {
@@ -201,7 +189,7 @@ function poolText() {
   if (m) parts.push(m > 0 ? `+${m}` : `${m}`);
   return parts.join(' + ').replace('+ -', '- ').replace('+ +', '+ ');
 }
-function isSingleD20() { const k = Object.keys(pool); return k.length === 1 && k[0] === '20' && pool[20] === 1; }
+function hasOneD20() { return pool[20] === 1; }
 
 function render() {
   document.querySelectorAll('.die').forEach(b => {
@@ -212,7 +200,7 @@ function render() {
   const t = poolText();
   $('pool').textContent = t || 'Zar seç…';
   $('pool').classList.toggle('empty', !t);
-  const ok = isSingleD20();
+  const ok = hasOneD20();
   document.querySelectorAll('#mode button').forEach(b => {
     b.disabled = !ok && b.dataset.m !== 'norm';
     b.setAttribute('aria-pressed', String((ok ? mode : 'norm') === b.dataset.m));
@@ -273,6 +261,187 @@ function applyExpr() {
 }
 
 /* ---- atış ---- */
+/* ---- 3D sahne (three.js) ---- */
+const V3 = (x, y, z) => new THREE.Vector3(x, y, z);
+const nonIdx = g => (g.index ? g.toNonIndexed() : g);
+
+// Beşgen trapezohedron (d10). h = a * 9.4721 olunca kite yüzler tam düzlemsel olur.
+function d10Geometry() {
+  const h = 1, a = h / 9.4721;
+  const U = k => V3(Math.cos(2 * Math.PI * k / 5), a, Math.sin(2 * Math.PI * k / 5));
+  const L = k => V3(Math.cos(2 * Math.PI * (k + .5) / 5), -a, Math.sin(2 * Math.PI * (k + .5) / 5));
+  const T = V3(0, h, 0), B = V3(0, -h, 0), pts = [];
+  const tri = (p, q, r) => {
+    const n = q.clone().sub(p).cross(r.clone().sub(p));
+    const c = p.clone().add(q).add(r);
+    if (n.dot(c) < 0) [q, r] = [r, q];            // dışa baksın
+    pts.push(p.x, p.y, p.z, q.x, q.y, q.z, r.x, r.y, r.z);
+  };
+  for (let k = 0; k < 5; k++) {
+    const A = [T, U(k), L(k), U(k + 1)], Bq = [B, L(k), U(k + 1), L(k + 1)];
+    [A, Bq].forEach(q => { tri(q[0], q[1], q[2]); tri(q[0], q[2], q[3]); });
+  }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute(pts, 3));
+  g.computeVertexNormals();
+  return g;
+}
+const GEO = {
+  4: () => new THREE.TetrahedronGeometry(1),
+  6: () => new THREE.BoxGeometry(1.25, 1.25, 1.25),
+  8: () => new THREE.OctahedronGeometry(1),
+  10: d10Geometry,
+  12: () => new THREE.DodecahedronGeometry(1),
+  20: () => new THREE.IcosahedronGeometry(1)
+};
+
+// Üçgenleri aynı düzlemdeki yüzlere topla
+function faces(geo) {
+  const pos = geo.attributes.position, cl = [];
+  for (let i = 0; i < pos.count; i += 3) {
+    const a = V3(0, 0, 0).fromBufferAttribute(pos, i), b = V3(0, 0, 0).fromBufferAttribute(pos, i + 1), c = V3(0, 0, 0).fromBufferAttribute(pos, i + 2);
+    const n = b.clone().sub(a).cross(c.clone().sub(a)).normalize();
+    let f = cl.find(f => f.n.dot(n) > 0.9995);
+    if (!f) cl.push(f = { n, v: [] });
+    f.v.push(a, b, c);
+  }
+  cl.forEach(f => {
+    const u = [];
+    f.v.forEach(p => { if (!u.some(q => q.distanceToSquared(p) < 1e-8)) u.push(p); });
+    f.v = u;
+    f.c = u.reduce((s, p) => s.add(p), V3(0, 0, 0)).divideScalar(u.length);
+  });
+  return cl;
+}
+
+// Zıt yüzlerin toplamı sabit olacak şekilde numaralandır (d4 hariç)
+function assign(cl, sides) {
+  const labels = sides === 10 ? [0, 1, 2, 3, 4, 5, 6, 7, 8, 9] : Array.from({ length: sides }, (_, i) => i + 1);
+  if (sides === 4) return labels.slice();
+  const opp = sides === 10 ? 9 : sides + 1, val = new Array(cl.length).fill(null), used = new Set();
+  cl.forEach((f, i) => {
+    if (val[i] !== null) return;
+    const j = cl.findIndex((g, k) => k !== i && val[k] === null && g.n.dot(f.n) < -0.999);
+    const v = labels.find(x => !used.has(x) && !used.has(opp - x) && x !== opp - x);
+    val[i] = v; used.add(v);
+    if (j >= 0) { val[j] = opp - v; used.add(opp - v); }
+  });
+  return val;
+}
+
+const texCache = {};
+function labelTex(text) {
+  if (texCache[text]) return texCache[text];
+  const c = document.createElement('canvas'); c.width = c.height = 128;
+  const x = c.getContext('2d');
+  x.fillStyle = '#f4d37a'; x.textAlign = 'center'; x.textBaseline = 'middle';
+  x.font = `800 ${text.length > 1 ? 62 : 88}px system-ui, sans-serif`;
+  x.fillText(text, 64, 62);
+  if (text === '6' || text === '9') x.fillRect(44, 112, 40, 8);   // 6 ile 9 karışmasın
+  const t = new THREE.CanvasTexture(c); t.anisotropy = 4;
+  return (texCache[text] = t);
+}
+
+function makeDie(sides, tens) {
+  const geo = nonIdx(GEO[sides]());
+  const cl = faces(geo), vals = assign(cl, sides);
+  const grp = new THREE.Group();
+  const mat = new THREE.MeshStandardMaterial({ color: 0x7c2b22, roughness: .4, metalness: .12, flatShading: true });
+  grp.add(new THREE.Mesh(geo, mat));
+  const frames = {};
+  cl.forEach((f, i) => {
+    const n = f.n;
+    let up;
+    if (sides === 6) up = Math.abs(n.y) > .9 ? V3(0, 0, 1) : V3(0, 1, 0);
+    else if (sides === 10) up = V3(0, n.y >= 0 ? 1 : -1, 0);
+    else up = f.v.reduce((m, p) => (p.distanceToSquared(f.c) > m.distanceToSquared(f.c) ? p : m)).clone().sub(f.c);
+    up.sub(n.clone().multiplyScalar(up.dot(n))).normalize();
+    const right = up.clone().cross(n);
+    const q = new THREE.Quaternion().setFromRotationMatrix(new THREE.Matrix4().makeBasis(right, up, n));
+    const rv = f.v.reduce((s, p) => s + p.distanceTo(f.c), 0) / f.v.length;
+    const size = rv * (f.v.length === 3 ? .95 : f.v.length === 4 ? 1.2 : 1.15);
+    const text = tens ? String(vals[i] * 10).padStart(2, '0') : String(vals[i]);
+    const m = new THREE.Mesh(new THREE.PlaneGeometry(size, size),
+      new THREE.MeshBasicMaterial({ map: labelTex(text), transparent: true, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2 }));
+    m.position.copy(f.c).addScaledVector(n, .006);
+    m.quaternion.copy(q);
+    grp.add(m);
+    frames[vals[i]] = q;
+  });
+  return { grp, mat, frames, geo };
+}
+
+let R = null;
+function initStage() {
+  if (R) return true;
+  if (typeof THREE === 'undefined') return false;
+  try {
+    const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+    renderer.setPixelRatio(Math.min(devicePixelRatio || 1, 2));
+    $('stage').appendChild(renderer.domElement);
+    const scene = new THREE.Scene(), camera = new THREE.PerspectiveCamera(35, 1, .1, 100);
+    scene.add(new THREE.AmbientLight(0xffffff, 1.1));
+    const key = new THREE.DirectionalLight(0xfff0d8, 3); key.position.set(-3, 6, 6); scene.add(key);
+    const rim = new THREE.PointLight(0xffa060, 45, 40); rim.position.set(5, 2, 6); scene.add(rim);
+    R = { renderer, scene, camera, dice: [], cols: 1, rows: 1 };
+    return true;
+  } catch (e) { console.warn('WebGL yok:', e); return false; }
+}
+const S = 2.5, CDIR = V3(0, .3, 1).normalize();
+function fit() {
+  const stage = $('stage'), w = stage.clientWidth || 300, h = 190 + (R.rows - 1) * 120;
+  stage.style.height = h + 'px';
+  R.renderer.setSize(w, h);
+  R.camera.aspect = w / h; R.camera.updateProjectionMatrix();
+  const t = Math.tan(THREE.MathUtils.degToRad(17.5));
+  const z = Math.max((R.rows * S / 2 + .5) / t, (R.cols * S / 2 + .3) / (t * R.camera.aspect));
+  R.camera.position.copy(CDIR).multiplyScalar(z);
+  R.camera.lookAt(0, 0, 0);
+  R.renderer.render(R.scene, R.camera);
+}
+addEventListener('resize', () => { if (R && R.dice.length) fit(); });
+
+const ease = t => 1 - Math.pow(1 - t, 3);
+function throwDice(list, done) {
+  if (!initStage()) return done();
+  R.dice.forEach(d => { R.scene.remove(d.grp); d.geo.dispose(); d.mat.dispose(); });
+  R.dice = [];
+  const n = list.length, cols = n <= 6 ? n : Math.ceil(n / Math.ceil(n / 6)), rows = Math.ceil(n / cols);
+  R.cols = cols; R.rows = rows; fit();
+  const qCam = new THREE.Quaternion().setFromUnitVectors(V3(0, 0, 1), CDIR);
+  list.forEach((it, i) => {
+    const d = makeDie(it.sides, it.tens);
+    const c = i % cols, r = Math.floor(i / cols), inRow = Math.min(cols, n - r * cols);
+    d.tx = (c - (inRow - 1) / 2) * S; d.ty = -(r - (rows - 1) / 2) * S;
+    d.x0 = d.tx + (Math.random() - .5) * 3; d.z0 = (Math.random() - .5) * 2;
+    d.qf = qCam.clone().multiply(d.frames[it.face].clone().invert());   // sonuç yüzü kameraya baksın
+    d.axis = V3(Math.random() - .5, Math.random() - .5, Math.random() - .5).normalize();
+    d.th0 = 6 + Math.random() * 6;
+    d.delay = i * .05; d.it = it;
+    R.scene.add(d.grp); R.dice.push(d);
+  });
+  const D = 1.35, t0 = performance.now(), total = D + n * .05;
+  (function frame(now) {
+    const el = (now - t0) / 1000;
+    R.dice.forEach(d => {
+      const t = Math.min(Math.max((el - d.delay) / D, 0), 1), e = ease(t);
+      d.grp.position.set(d.x0 + (d.tx - d.x0) * e, d.ty + 3.2 * Math.pow(1 - t, 2) * Math.abs(Math.cos(2.5 * Math.PI * t)), d.z0 * (1 - e));
+      d.grp.quaternion.setFromAxisAngle(d.axis, d.th0 * (1 - e)).multiply(d.qf);
+    });
+    R.renderer.render(R.scene, R.camera);
+    if (el < total + .05) return requestAnimationFrame(frame);
+    R.dice.forEach(d => {
+      const hl = d.it.hl;
+      if (hl === 'max') d.mat.emissive.set(0x6b4a10);
+      if (hl === 'min') d.mat.emissive.set(0x5a0a0a);
+      if (d.it.drop) { d.mat.transparent = true; d.mat.opacity = .3; }
+    });
+    R.renderer.render(R.scene, R.camera);
+    done();
+  })(performance.now());
+}
+
+/* ---- atış ---- */
 let busy = false;
 function doRoll() {
   if (busy) return;
@@ -280,24 +449,22 @@ function doRoll() {
   const sides = Object.keys(pool).map(Number).sort((a, b) => a - b);
   if (!sides.length) { $('err').textContent = 'Önce bir zar seç.'; return; }
   const mod = +$('mod').value || 0;
-  const adv = isSingleD20() ? mode : 'norm';
+  const adv = hasOneD20() ? mode : 'norm';
 
-  // sonucu baştan belirle, animasyon yalnız görsel
   const groups = sides.map(s => ({ s, vals: Array.from({ length: pool[s] }, () => rand(s)) }));
-  let kept = null, dropped = null;
+  // Avantaj/dezavantaj yalnız d20 için: ikinci bir d20 atılır, yüksek/düşük olan sayılır; diğer zarlar normal.
+  let dropped = -1, d20 = null;
+  const g20 = groups.find(g => g.s === 20);
   if (adv !== 'norm') {
-    const a = groups[0].vals[0], b = rand(20);
-    const pick = adv === 'adv' ? Math.max(a, b) : Math.min(a, b);
-    groups[0].vals = [a, b];
-    kept = pick; dropped = a === b ? 1 : (a === pick ? 1 : 0); // atılan indeks
-    if (a === b) dropped = 1;
-    else dropped = (a === pick) ? 1 : 0;
-  }
-  const sum = adv !== 'norm' ? kept : groups.reduce((t, g) => t + g.vals.reduce((x, y) => x + y, 0), 0);
+    const a = g20.vals[0], b = rand(20);
+    g20.vals = [a, b];
+    d20 = adv === 'adv' ? Math.max(a, b) : Math.min(a, b);
+    dropped = a === d20 ? 1 : 0;
+  } else if (hasOneD20()) d20 = g20.vals[0];
+  const sum = groups.reduce((t, g) => t + (g.s === 20 && adv !== 'norm' ? d20 : g.vals.reduce((x, y) => x + y, 0)), 0);
   const total = sum + mod;
-  const single20 = isSingleD20();
-  const final = single20 ? kept ?? groups[0].vals[0] : null;
-  const crit = single20 && final === 20, fumble = single20 && final === 1;
+  const crit = d20 === 20, fumble = d20 === 1;
+  const isDrop = (g, i) => g.s === 20 && adv !== 'norm' && i === dropped;
 
   const show = () => {
     $('total').textContent = total;
@@ -307,7 +474,7 @@ function doRoll() {
     const parts = $('parts'); parts.textContent = '';
     groups.forEach(g => g.vals.forEach((v, i) => {
       const c = document.createElement('span');
-      c.className = 'chip' + (v === g.s ? ' max' : v === 1 ? ' min' : '') + (adv !== 'norm' && i === dropped ? ' drop' : '');
+      c.className = 'chip' + (v === g.s ? ' max' : v === 1 ? ' min' : '') + (isDrop(g, i) ? ' drop' : '');
       c.innerHTML = `<small>d${g.s}</small>${v}`;
       parts.appendChild(c);
     }));
@@ -317,38 +484,20 @@ function doRoll() {
     busy = false;
   };
 
-  // Zar sahnesi: her zar düşer, zıplar, döner, sonra yüzü görünür.
-  // (Bilerek prefers-reduced-motion'a bakmıyor: zar atmanın kendisi bu.)
+  // 3D sahneye giden zarlar (d100 = onlar d10'u + birler d10'u)
+  const list = [];
+  groups.forEach(g => g.vals.forEach((v, i) => {
+    const hl = v === g.s ? 'max' : v === 1 ? 'min' : '';
+    if (g.s === 100) {
+      list.push({ sides: 10, tens: true, face: v === 100 ? 0 : Math.floor(v / 10) });
+      list.push({ sides: 10, tens: false, face: v === 100 ? 0 : v % 10 });
+    } else list.push({ sides: g.s, face: g.s === 10 ? v % 10 : v, hl, drop: isDrop(g, i) });
+  }));
   busy = true;
-  const stage = $('stage'); stage.textContent = '';
-  const flat = [];
-  groups.forEach(g => g.vals.forEach((v, i) => flat.push({ s: g.s, v, drop: adv !== 'norm' && i === dropped })));
-  const shown = flat.slice(0, 24), els = [];
-  shown.forEach((d, i) => {
-    const ns = 'http://www.w3.org/2000/svg';
-    const svg = document.createElementNS(ns, 'svg');
-    svg.setAttribute('viewBox', '0 0 64 64');
-    svg.setAttribute('class', 'sd rolling');
-    svg.style.setProperty('--r', ((Math.random() < .5 ? -1 : 1) * 360 * (1 + rand(2))) + 'deg');
-    svg.style.setProperty('--x', ((rand(60) - 30)) + 'px');
-    svg.style.setProperty('--dl', (i * 0.04) + 's');
-    const poly = document.createElementNS(ns, 'polygon'); poly.setAttribute('points', SHAPES[d.s] || SHAPES[20]);
-    const txt = document.createElementNS(ns, 'text'); txt.setAttribute('x', 32); txt.setAttribute('y', d.s === 4 ? 44 : 34);
-    txt.textContent = rand(d.s); // yuvarlanırken değişen yüz
-    svg.append(poly, txt); stage.appendChild(svg); els.push({ svg, txt, d });
-  });
-  $('total').className = 'total'; $('total').textContent = '…'; $('label').textContent = '';
-  const cyc = setInterval(() => els.forEach(e => e.txt.textContent = rand(e.d.s)), 70);
-  setTimeout(() => {
-    clearInterval(cyc);
-    els.forEach(e => {
-      e.txt.textContent = e.d.v;
-      if (e.d.v === e.d.s) e.svg.classList.add('max'); else if (e.d.v === 1) e.svg.classList.add('min');
-      if (e.d.drop) e.svg.classList.add('drop');
-    });
-    show();
-  }, 1000 + shown.length * 40);
+  $('total').className = 'total'; $('total').textContent = '…'; $('label').textContent = ''; $('parts').textContent = '';
+  throwDice(list.slice(0, 24), show);
 }
+
 $('roll').onclick = doRoll;
 addEventListener('keydown', e => {
   if (e.key === ' ' && !/INPUT|BUTTON/.test(document.activeElement.tagName)) { e.preventDefault(); doRoll(); }
