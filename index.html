@@ -6,141 +6,207 @@
 <title>D&D Zar Atıcı</title>
 <style>
   :root {
-    --bg: #14110f; --panel: #1e1915; --line: #3a3129; --ink: #efe6d8; --dim: #9b8f80;
-    --gold: #e0b048; --red: #d9584a; --green: #6fb36f; --accent: #b8452f;
+    --bg: #120f0d; --panel: #1d1814; --line: #3a3027; --ink: #f1e8da; --dim: #a09484;
+    --gold: #e6b64f; --red: #e0604f; --green: #6fb36f; --accent: #c04a2f; --accent2: #98351f;
   }
   * { box-sizing: border-box; }
-  body { margin: 0; background: var(--bg); color: var(--ink); font: 16px/1.4 system-ui, "Segoe UI", sans-serif; }
-  main { max-width: 980px; margin: 0 auto; padding: 20px 16px 48px; display: grid; gap: 16px;
-         grid-template-columns: minmax(0, 1fr) 300px; }
+  html { -webkit-text-size-adjust: 100%; }
+  body { margin: 0; min-height: 100vh; color: var(--ink); font: 16px/1.45 system-ui, "Segoe UI", Roboto, sans-serif;
+         background: radial-gradient(900px 520px at 10% -8%, rgba(192, 92, 50, .17), transparent 62%),
+                     radial-gradient(820px 500px at 100% 0%, rgba(96, 74, 176, .14), transparent 60%), var(--bg);
+         background-attachment: fixed; }
+
+  /* ---- sayfa iskeleti ---- */
+  main { max-width: 1240px; margin: 0 auto; padding: 18px 20px 56px; display: grid; gap: 18px; align-items: start;
+         grid-template-columns: minmax(0, 1fr);
+         grid-template-areas: "top" "result" "roll" "picker" "hist"; }
+  .top { grid-area: top; } .res { grid-area: result; } .rollwrap { grid-area: roll; } .picker { grid-area: picker; } aside { grid-area: hist; }
   main > section, main > .rollwrap, aside { min-width: 0; }
-  .top { grid-column: 1 / -1; display: flex; justify-content: space-between; align-items: center; gap: 12px; position: relative; }
+  @media (min-width: 880px) {
+    main { grid-template-columns: minmax(0, 1.5fr) minmax(350px, 1fr);
+           grid-template-areas: "top top" "result picker" "roll picker" "hist hist"; }
+    .picker { align-self: stretch; }
+  }
+
+  /* ---- başlık ---- */
+  .top { display: flex; justify-content: space-between; align-items: center; gap: 12px; position: relative; padding: 2px 2px 0; }
+  .brand { display: flex; align-items: center; gap: 12px; min-width: 0; }
+  .logo { width: 38px; height: 38px; flex: none; filter: drop-shadow(0 3px 8px rgba(230, 182, 79, .25)); }
+  .logo polygon { fill: #3a2a1f; stroke: var(--gold); stroke-width: 3; stroke-linejoin: round; }
+  .logo text { fill: var(--ink); font: 800 21px system-ui; text-anchor: middle; dominant-baseline: central; }
+  h1 { margin: 0; font-size: 1.35rem; letter-spacing: .03em; font-weight: 700; }
+  h1 span { display: block; color: var(--dim); font-weight: 400; font-size: .8rem; letter-spacing: .02em; margin-top: 1px; }
+
+  /* ---- kartlar ---- */
+  section { background: linear-gradient(180deg, #231d18, #1a1511); border: 1px solid #372d25; border-radius: 16px; padding: 16px;
+            box-shadow: 0 10px 28px rgba(0, 0, 0, .35), inset 0 1px 0 rgba(255, 255, 255, .035); }
+  h2 { margin: 0 0 12px; font-size: .74rem; text-transform: uppercase; letter-spacing: .14em; color: var(--dim); font-weight: 700;
+       display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+  h2 small { font: 400 .72rem/1.2 system-ui; letter-spacing: .02em; text-transform: none; opacity: .8; text-align: right; }
+
+  /* ---- ayarlar ---- */
   .settings { position: relative; }
   #setBtn { white-space: nowrap; }
-  .panel { position: absolute; right: 0; top: calc(100% + 6px); z-index: 5; background: var(--panel); border: 1px solid var(--line);
-           border-radius: 10px; padding: 12px 14px; box-shadow: 0 10px 30px rgba(0,0,0,.5); min-width: 250px; max-width: 290px; }
+  .panel { position: absolute; right: 0; top: calc(100% + 8px); z-index: 30; background: #1d1814; border: 1px solid #44372b;
+           border-radius: 14px; padding: 16px 18px; box-shadow: 0 18px 44px rgba(0, 0, 0, .6); min-width: 280px; max-width: 320px; }
   .panel[hidden] { display: none; }
-  .step { display: inline-flex; align-items: stretch; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
-  .step button { width: 40px; min-height: 38px; background: #1c1712; color: var(--ink); border: 0; font: 700 1.3rem/1 system-ui; cursor: pointer;
-                 touch-action: manipulation; -webkit-user-select: none; user-select: none; }
-  .step button:active { background: var(--accent); }
-  .step button:focus-visible { outline: 2px solid var(--gold); outline-offset: -2px; }
-  .step input[type=number] { width: 58px; border: 0; border-left: 1px solid var(--line); border-right: 1px solid var(--line); border-radius: 0;
-                             text-align: center; -moz-appearance: textfield; appearance: textfield; }
-  .step input::-webkit-inner-spin-button, .step input::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
-  .tog { display: flex; gap: 10px; align-items: center; color: var(--ink); font-size: .9rem; cursor: pointer; }
-  .tog input { width: 22px; height: 22px; accent-color: var(--accent); flex: none; }
-  .panel h2 { margin: 14px 0 8px; }
+  .panel h2 { margin: 16px 0 9px; }
   .panel h2:first-child { margin-top: 0; }
-  h1 { margin: 0; font-size: 1.3rem; letter-spacing: .04em; font-weight: 600; }
-  h1 span { color: var(--dim); font-weight: 400; font-size: .9rem; margin-left: .6em; }
-  section { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 14px; }
-  h2 { margin: 0 0 10px; font-size: .78rem; text-transform: uppercase; letter-spacing: .1em; color: var(--dim); font-weight: 600; }
+  .tog { display: flex; gap: 10px; align-items: center; color: var(--ink); font-size: .92rem; cursor: pointer; line-height: 1.3; }
+  .tog input { width: 22px; height: 22px; accent-color: var(--accent); flex: none; }
+  .swatches { display: flex; gap: 10px; flex-wrap: wrap; }
+  .sw { width: 30px; height: 30px; border-radius: 50%; border: 2px solid #4a3d31; cursor: pointer; padding: 0;
+        transition: transform .12s, border-color .15s; }
+  .sw:hover { transform: scale(1.12); }
+  .sw[aria-pressed=true] { border-color: var(--gold); box-shadow: 0 0 0 2px #000 inset, 0 0 12px rgba(230, 182, 79, .35); }
+  .sw:focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; }
 
-  .dice { display: grid; grid-template-columns: repeat(auto-fill, minmax(86px, 1fr)); gap: 10px; }
-  .die { position: relative; background: none; border: 0; padding: 4px; cursor: pointer; color: var(--ink);
-         display: grid; justify-items: center; gap: 2px; border-radius: 8px; }
-  .die:hover svg polygon { fill: #3a2c22; }
-  .die:focus-visible { outline: 2px solid var(--gold); }
-  .die svg { width: 64px; height: 64px; }
-  .die polygon { fill: #2a2119; stroke: var(--gold); stroke-width: 3; stroke-linejoin: round; transition: fill .15s; }
-  .die text { fill: var(--ink); font: 700 22px system-ui; text-anchor: middle; dominant-baseline: central; }
-  .die .name { font-size: .8rem; color: var(--dim); }
-  .die .badge { position: absolute; top: 0; right: 6px; min-width: 22px; height: 22px; border-radius: 11px;
-                background: var(--accent); color: #fff; font-size: .8rem; font-weight: 700; display: none;
-                place-items: center; padding: 0 5px; }
-  .die.has .badge { display: grid; }
-  .die.has polygon { stroke: #fff3d0; }
-
-  .row { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin-top: 14px; }
-  .pool { min-height: 1.6em; font-size: 1.1rem; font-weight: 600; flex: 1 1 100%; }
-  .pool.empty { color: var(--dim); font-weight: 400; }
-  label { color: var(--dim); font-size: .85rem; }
-  input[type=text], input[type=number] { background: #120f0c; color: var(--ink); border: 1px solid var(--line);
-         border-radius: 6px; padding: 7px 9px; font: inherit; }
-  input[type=number] { width: 64px; text-align: center; }
-  input[type=text] { flex: 1 1 140px; min-width: 0; }
-  button.btn { background: #2a2119; color: var(--ink); border: 1px solid var(--line); border-radius: 6px;
-               padding: 7px 12px; font: inherit; cursor: pointer; }
+  /* ---- düğmeler ve alanlar ---- */
+  label { color: var(--dim); font-size: .8rem; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; }
+  input[type=text], input[type=number] { background: #110d0a; color: var(--ink); border: 1px solid var(--line);
+         border-radius: 10px; padding: 10px 12px; font: inherit; transition: border-color .15s, box-shadow .15s; }
+  input[type=text]:focus, input[type=number]:focus { outline: none; border-color: var(--gold); box-shadow: 0 0 0 3px rgba(230, 182, 79, .15); }
+  input[type=text]::placeholder { color: #6f6458; }
+  button.btn { background: linear-gradient(180deg, #30271f, #261e18); color: var(--ink); border: 1px solid #44372b; border-radius: 10px;
+               padding: 9px 15px; font: inherit; font-weight: 600; cursor: pointer; transition: border-color .15s, transform .1s, background .15s; }
   button.btn:hover { border-color: var(--gold); }
-  button.btn:focus-visible { outline: 2px solid var(--gold); }
-  .seg { display: inline-flex; border: 1px solid var(--line); border-radius: 6px; overflow: hidden; }
-  .seg button { background: #120f0c; color: var(--dim); border: 0; padding: 7px 11px; font: inherit; cursor: pointer; }
+  button.btn:active { transform: translateY(1px); }
+  button.btn:focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; }
+  .seg { display: inline-flex; border: 1px solid var(--line); border-radius: 10px; overflow: hidden; background: #110d0a; }
+  .seg button { background: transparent; color: var(--dim); border: 0; padding: 10px 12px; min-width: 40px; font: inherit; font-weight: 600;
+                cursor: pointer; transition: background .15s, color .15s; }
+  .seg button:hover:not(:disabled):not([aria-pressed=true]) { background: #221b15; color: var(--ink); }
+  .seg button + button { border-left: 1px solid #2c241d; }
   .seg button[aria-pressed=true] { background: var(--accent); color: #fff; }
   .seg button:disabled { opacity: .35; cursor: not-allowed; }
-  #roll { width: 100%; background: var(--accent); border: 0; color: #fff; font-size: 1.15rem; font-weight: 700;
-          padding: 13px; border-radius: 8px; cursor: pointer; letter-spacing: .06em; }
-  #roll:hover { background: #cf5239; }
-  #roll:focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; }
+  .seg button:focus-visible { outline: 2px solid var(--gold); outline-offset: -2px; }
+  .step { display: inline-flex; align-items: stretch; border: 1px solid var(--line); border-radius: 10px; overflow: hidden; background: #110d0a; }
+  .step button { width: 52px; min-height: 42px; background: #231c16; color: var(--ink); border: 0; font: 700 1.4rem/1 system-ui; cursor: pointer;
+                 touch-action: manipulation; -webkit-user-select: none; user-select: none; transition: background .12s; }
+  .step button:hover { background: #2e251d; }
+  .step button:active { background: var(--accent); }
+  .step button:focus-visible { outline: 2px solid var(--gold); outline-offset: -2px; }
+  .step input[type=number] { flex: 1; min-width: 0; width: 100%; border: 0; border-left: 1px solid var(--line); border-right: 1px solid var(--line);
+                             border-radius: 0; text-align: center; font-weight: 700; font-size: 1.1rem; -moz-appearance: textfield; appearance: textfield; }
+  .step input::-webkit-inner-spin-button, .step input::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
 
-  .result { text-align: center; padding: 8px 0 2px; }
-  .bonus { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; flex: 1 1 100%; }
-  .seg button { min-width: 38px; }
-  .stage { position: relative; width: 100%; height: 230px; border-radius: 12px; overflow: hidden;
-           border: 3px solid #4a3322; background: #1f3a2b; }
+  /* ---- zar seçici ---- */
+  .dice { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }
+  .die { position: relative; display: grid; justify-items: center; gap: 3px; padding: 12px 4px 8px; border-radius: 14px; cursor: pointer; color: var(--ink);
+         background: linear-gradient(180deg, #2c241c, #211a14); border: 1px solid #3d3228;
+         transition: transform .12s, border-color .15s, box-shadow .15s; touch-action: manipulation;
+         -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
+  .die:hover { transform: translateY(-2px); border-color: #70573a; box-shadow: 0 10px 20px rgba(0, 0, 0, .38); }
+  .die:active { transform: translateY(0) scale(.97); }
+  .die:focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; }
+  .die.has { border-color: var(--gold); box-shadow: 0 0 0 1px rgba(230, 182, 79, .3), 0 10px 24px rgba(230, 182, 79, .12); }
+  .die svg { width: 58px; height: 58px; }
+  .die polygon { fill: #35291f; stroke: var(--gold); stroke-width: 3; stroke-linejoin: round; transition: fill .15s; }
+  .die:hover polygon { fill: #44342a; }
+  .die.has polygon { stroke: #fff3d0; }
+  .die text { fill: var(--ink); font: 700 22px system-ui; text-anchor: middle; dominant-baseline: central; }
+  .die .name { font-size: .78rem; color: var(--dim); font-weight: 600; letter-spacing: .04em; }
+  .die .badge { position: absolute; top: 6px; right: 8px; min-width: 22px; height: 22px; border-radius: 11px; background: var(--accent); color: #fff;
+                font-size: .8rem; font-weight: 800; display: none; place-items: center; padding: 0 5px; box-shadow: 0 2px 6px rgba(0, 0, 0, .5); }
+  .die.has .badge { display: grid; }
+
+  .row { display: grid; gap: 14px; margin-top: 16px; }
+  .pool { min-height: 2.6em; display: grid; place-items: center; padding: 8px 12px; font-size: 1.12rem; font-weight: 700; background: #110d0a;
+          border: 1px dashed #4a3d31; border-radius: 12px; text-align: center; }
+  .pool.empty { color: var(--dim); font-weight: 400; font-size: 1rem; }
+  .ctl { display: grid; gap: 7px; }
+  .bonus { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 8px; align-items: stretch; }
+  .bonus .ttl { grid-column: 1 / -1; }
+  .bonus .step { grid-column: 1 / -1; display: grid; grid-template-columns: 52px minmax(0, 1fr) 52px; }
+  #nums, #mode { display: flex; }
+  #nums button, #mode button { flex: 1; }
+  .exprrow { display: flex; gap: 10px; }
+  .exprrow input { flex: 1; min-width: 0; }
+  details.hintd { color: var(--dim); font-size: .8rem; }
+  details.hintd summary { cursor: pointer; padding: 2px 0; list-style: none; opacity: .85; }
+  details.hintd summary::before { content: "ⓘ "; }
+  details.hintd summary:hover { opacity: 1; color: var(--ink); }
+  details.hintd p { margin: 6px 0 0; padding-left: 10px; border-left: 2px solid #3a3027; line-height: 1.5; }
+
+  /* ---- ZAR AT ---- */
+  .rollwrap { display: grid; gap: 6px; }
+  #roll { width: 100%; border: 0; color: #fff; font-size: 1.2rem; font-weight: 800; padding: 16px; border-radius: 14px; cursor: pointer; letter-spacing: .14em;
+          background: linear-gradient(180deg, #d4572f, #a93a22); box-shadow: 0 8px 24px rgba(192, 74, 47, .35), inset 0 1px 0 rgba(255, 255, 255, .22);
+          transition: transform .1s, box-shadow .15s, filter .15s; }
+  #roll:hover { filter: brightness(1.08); box-shadow: 0 10px 30px rgba(192, 74, 47, .5), inset 0 1px 0 rgba(255, 255, 255, .25); }
+  #roll:active { transform: translateY(1px) scale(.995); }
+  #roll:focus-visible { outline: 2px solid var(--gold); outline-offset: 3px; }
+  .rollwrap .err { text-align: center; margin: 0; }
+  .err { color: var(--red); font-size: .85rem; min-height: 1.2em; }
+  .pmini, #clear2 { display: none; }
+  .rollrow { display: contents; }
+
+  /* ---- sonuç ---- */
+  .result { text-align: center; padding: 2px 0 0; }
+  .stage { position: relative; width: 100%; height: 230px; border-radius: 14px; overflow: hidden; border: 2px solid #4a3322; background: #1f3a2b;
+           box-shadow: 0 6px 20px rgba(0, 0, 0, .4); }
   .stage canvas { display: block; width: 100%; height: 100%; }
-  .stage::after { content: ""; position: absolute; inset: 0; pointer-events: none; border-radius: 9px;
-                  box-shadow: inset 0 0 55px rgba(0,0,0,.65); }
-  .total { font-size: 4.2rem; font-weight: 800; line-height: 1; font-variant-numeric: tabular-nums; }
-  .total.crit { color: var(--gold); }
-  .total.fumble { color: var(--red); }
-  .label { color: var(--dim); min-height: 1.4em; margin-top: 6px; }
-  .parts { display: flex; flex-wrap: wrap; gap: 6px; justify-content: center; margin-top: 12px; min-height: 34px; }
-  .chip { background: #120f0c; border: 1px solid var(--line); border-radius: 6px; padding: 3px 9px;
-          font-variant-numeric: tabular-nums; font-size: .95rem; }
-  .chip small { color: var(--dim); margin-right: 4px; }
+  .stage::after { content: ""; position: absolute; inset: 0; pointer-events: none; border-radius: 12px; box-shadow: inset 0 0 60px rgba(0, 0, 0, .6); }
+  .total { margin-top: 12px; font-size: clamp(3.6rem, 8vw, 5.2rem); font-weight: 800; line-height: 1; font-variant-numeric: tabular-nums;
+           text-shadow: 0 4px 20px rgba(0, 0, 0, .5); }
+  .total.crit { color: var(--gold); text-shadow: 0 0 28px rgba(230, 182, 79, .45); }
+  .total.fumble { color: var(--red); text-shadow: 0 0 28px rgba(224, 96, 79, .4); }
+  .total.pop { animation: pop .38s cubic-bezier(.2, 1.5, .4, 1); }
+  @keyframes pop { 0% { transform: scale(.7); opacity: .3; } 60% { transform: scale(1.08); } 100% { transform: scale(1); opacity: 1; } }
+  @media (prefers-reduced-motion: reduce) { .total.pop { animation: none; } }
+  .label { color: var(--dim); min-height: 1.4em; margin-top: 8px; }
+  .parts { display: flex; flex-wrap: wrap; gap: 7px; justify-content: center; margin-top: 12px; min-height: 34px; }
+  .chip { background: #110d0a; border: 1px solid var(--line); border-radius: 9px; padding: 4px 10px; font-variant-numeric: tabular-nums; font-size: .95rem; font-weight: 600; }
+  .chip small { color: var(--dim); margin-right: 5px; font-weight: 500; }
   .chip.max { border-color: var(--gold); color: var(--gold); }
   .chip.min { border-color: var(--red); color: var(--red); }
   .chip.drop { opacity: .4; text-decoration: line-through; }
 
-  aside { grid-column: 2; grid-row: 2 / span 3; }
-  .rollwrap { display: grid; gap: 6px; }
-  .rollwrap .err { text-align: center; margin: 0; }
-  .swatches { display: flex; gap: 10px; }
-  .sw { width: 26px; height: 26px; border-radius: 50%; border: 2px solid var(--line); cursor: pointer; padding: 0; }
-  .sw[aria-pressed=true] { border-color: var(--gold); box-shadow: 0 0 0 2px #000 inset; }
-  .sw:focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; }
-  #hist { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
-  #hist li { display: flex; justify-content: space-between; gap: 8px; padding: 7px 9px; background: #120f0c;
-             border-radius: 6px; font-size: .9rem; }
-  #hist .n { color: var(--dim); }
-  #hist b { font-variant-numeric: tabular-nums; }
+  /* ---- geçmiş ---- */
+  .hh { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
+  .hh h2 { margin: 0; }
+  #hist { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); }
+  #hist li { display: grid; grid-template-columns: 1fr auto; gap: 2px 10px; padding: 9px 12px; background: #110d0a; border: 1px solid #2c241d; border-radius: 11px; font-size: .9rem; }
+  #hist .n { color: var(--ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  #hist .tm { color: var(--dim); font-size: .72rem; grid-column: 1; }
+  #hist b { font-variant-numeric: tabular-nums; font-size: 1.3rem; grid-row: 1 / span 2; grid-column: 2; align-self: center; }
   #hist .crit { color: var(--gold); } #hist .fumble { color: var(--red); }
   .empty-h { color: var(--dim); font-size: .9rem; }
-  .hint { flex: 1 1 100%; color: var(--dim); font-size: .78rem; }
-  .err { color: var(--red); font-size: .85rem; flex: 1 1 100%; min-height: 1.2em; }
 
-  .die { touch-action: manipulation; -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
-  .pmini, #clear2 { display: none; }
-  .rollrow { display: contents; }
-  @media (pointer: coarse) { .seg button, .btn { min-height: 44px; } .sw { width: 36px; height: 36px; } }
+  @media (pointer: coarse) { .seg button, .btn, .step button { min-height: 46px; } .sw { width: 38px; height: 38px; } }
+
+  /* ---- telefon: zarlar ve ZAR AT ekranın altına sabit, sonuç hep görünür ---- */
   @media (max-width: 760px) {
-    main { grid-template-columns: 1fr; padding-bottom: 210px; }
-    aside { grid-column: 1; grid-row: auto; }
-    .top h1 span { display: none; }
-    /* Zarlar ve ZAR AT ekranın altına sabit: sonuç hep görünür, kaydırmak gerekmez */
+    main { padding: 14px 12px 230px; gap: 14px; }
+    section { padding: 14px; border-radius: 14px; }
+    h1 span { display: none; }
+    .logo { width: 32px; height: 32px; }
     #dice { position: fixed; left: 0; right: 0; bottom: calc(96px + env(safe-area-inset-bottom)); z-index: 20;
             display: grid; grid-template-columns: repeat(7, 1fr); gap: 2px; padding: 8px 6px 4px;
-            background: #1b1612; border-top: 1px solid var(--line); }
+            background: #1b1612; border-top: 1px solid var(--line); box-shadow: 0 -8px 20px rgba(0, 0, 0, .35); }
+    #dice .die { padding: 2px 0; background: none; border: 0; box-shadow: none; border-radius: 8px; }
+    #dice .die:hover { transform: none; box-shadow: none; }
     #dice .die svg { width: 44px; height: 44px; }
-    #dice .die { padding: 2px 0; }
-    #dice .die .badge { right: 2px; }
-    .rollwrap { position: fixed; left: 0; right: 0; bottom: 0; z-index: 20; background: #1b1612; box-sizing: border-box;
-                min-height: 96px; padding: 6px 10px calc(10px + env(safe-area-inset-bottom)); }
-    .pmini { display: block; text-align: center; color: var(--dim); font-size: .85rem; margin-bottom: 6px;
-             white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    #dice .die .badge { right: 2px; top: 0; }
+    .rollwrap { position: fixed; left: 0; right: 0; bottom: 0; z-index: 20; background: #1b1612; min-height: 96px;
+                padding: 6px 10px calc(10px + env(safe-area-inset-bottom)); }
+    .pmini { display: block; text-align: center; color: var(--dim); font-size: .85rem; margin-bottom: 6px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
     .rollrow { display: grid; grid-template-columns: auto 1fr; gap: 8px; }
     #clear2 { display: inline-block; }
-    #roll { padding: 14px; }
+    #roll { padding: 14px; border-radius: 12px; }
     .rollwrap .err { position: absolute; left: 0; right: 0; bottom: 100%; margin: 0; background: #1b1612; }
     .rollwrap .err:empty { display: none; }
+    #hist { grid-template-columns: 1fr; }
   }
 </style>
 </head>
 <body>
 <main>
   <header class="top">
-    <h1>D&amp;D Zar Atıcı <span>tüm zarlar · tıkla, ekle, at</span></h1>
+    <div class="brand">
+      <svg class="logo" viewBox="0 0 64 64" aria-hidden="true"><polygon points="32,4 57,18 57,46 32,60 7,46 7,18"/><text x="32" y="34">20</text></svg>
+      <h1>D&amp;D Zar Atıcı <span>tüm zarlar · tıkla, ekle, at</span></h1>
+    </div>
     <div class="settings">
       <button type="button" class="btn" id="setBtn" aria-haspopup="true" aria-expanded="false" aria-controls="setPanel">⚙ Ayarlar</button>
       <div class="panel" id="setPanel" hidden>
@@ -152,11 +218,11 @@
         <div class="swatches" id="swInk" role="group" aria-label="Yazı rengi"></div>
         <h2>Atış</h2>
         <label class="tog"><input type="checkbox" id="quick"> Hızlı atış: zara dokununca hemen at</label>
-        </div>
+      </div>
     </div>
   </header>
 
-  <section>
+  <section class="res">
     <h2>Sonuç</h2>
     <div class="result" aria-live="polite">
       <div class="stage" id="stage" aria-hidden="true"></div>
@@ -175,14 +241,14 @@
     <div class="err" id="err"></div>
   </div>
 
-  <section>
-    <h2>Zarlar (tıkla = ekle, sağ tık / uzun bas = çıkar)</h2>
+  <section class="picker">
+    <h2>Zarlar <small>tıkla = ekle · sağ tık / uzun bas = çıkar</small></h2>
     <div class="dice" id="dice"></div>
 
     <div class="row">
       <div class="pool empty" id="pool" aria-live="polite">Zar seç…</div>
-      <div class="bonus">
-        <label>Bonus</label>
+      <div class="bonus ctl">
+        <label class="ttl">Bonus</label>
         <div class="seg" id="sign" role="group" aria-label="Bonus işareti">
           <button type="button" data-sg="-1" aria-pressed="false">−</button>
           <button type="button" data-sg="1" aria-pressed="true">+</button>
@@ -200,20 +266,27 @@
           <button type="button" id="modP" aria-label="Bonusu artır">+</button>
         </div>
       </div>
+      <div class="ctl"><label>Durum</label>
       <div class="seg" id="mode" role="group" aria-label="Avantaj durumu">
         <button type="button" data-m="dis" aria-pressed="false">Dezavantaj</button>
         <button type="button" data-m="norm" aria-pressed="true">Normal</button>
         <button type="button" data-m="adv" aria-pressed="false">Avantaj</button>
+      </div></div>
+      <div class="ctl"><label>Ya da yaz</label>
+        <div class="exprrow">
+          <input type="text" id="expr" placeholder="2d6+1d8+3" aria-label="Zar ifadesi" autocomplete="off">
+          <button type="button" class="btn" id="clear">Temizle</button>
+        </div>
       </div>
-      <button type="button" class="btn" id="clear">Temizle</button>
-      <input type="text" id="expr" placeholder="ya da yaz: 2d6+1d8+3" aria-label="Zar ifadesi" autocomplete="off">
-      <div class="hint">Avantaj/dezavantaj yalnız d20 içindir: havuzda <b>tek d20</b> olunca açılır; ikinci bir d20 atılır, yüksek/düşük olan sayılır. Diğer zarlar (hasar, Bless d4) normal atılır. 2d20 eklemek avantaj değil, toplamdır.</div>
+      <details class="hintd"><summary>Avantaj nasıl çalışır?</summary>
+        <p>Avantaj/dezavantaj yalnız d20 içindir: havuzda <b>tek d20</b> olunca açılır; ikinci bir d20 atılır, yüksek/düşük olan sayılır. Diğer zarlar (hasar, Bless d4) normal atılır. 2d20 eklemek avantaj değil, toplamdır.</p>
+      </details>
     </div>
   </section>
 
   <aside>
     <section>
-      <h2>Geçmiş <button type="button" class="btn" id="clearH" style="float:right;padding:2px 8px;font-size:.75rem">sil</button></h2>
+      <div class="hh"><h2>Geçmiş</h2><button type="button" class="btn" id="clearH">Temizle</button></div>
       <ul id="hist"></ul>
       <div class="empty-h" id="emptyH">Henüz atış yok.</div>
     </section>
@@ -740,6 +813,7 @@ function startLoop() {
 
 /* ---- hızlı atış: dokundukça zar atılır, 5 sn dokunulmazsa tek kayıt olarak geçmişe yazılır ---- */
 const QUICK_MS = 5000;
+function popTotal() { const t = $('total'); t.classList.remove('pop'); void t.offsetWidth; t.classList.add('pop'); }
 let qs = null;
 const hlOf = (v, s) => (v === s ? 'max' : v === 1 ? 'min' : '');
 function quickText(rs, mod) {
@@ -759,6 +833,7 @@ function quickShow(force) {
   const mod = +$('mod').value || 0, st = quickStats(rs, mod);
   $('total').textContent = st.total;
   $('total').className = 'total' + (st.crit ? ' crit' : st.fumble ? ' fumble' : '');
+  popTotal();
   $('label').textContent = (st.crit ? 'KRİTİK! ' : st.fumble ? 'Kritik başarısızlık. ' : '') + quickText(rs, mod) + ' · hızlı atış';
   const parts = $('parts'); parts.textContent = '';
   rs.forEach(r => r.all.forEach(x => {
@@ -839,6 +914,7 @@ function doRoll() {
   const show = () => {
     $('total').textContent = total;
     $('total').className = 'total' + (crit ? ' crit' : fumble ? ' fumble' : '');
+    popTotal();
     $('label').textContent = (crit ? 'KRİTİK! ' : fumble ? 'Kritik başarısızlık. ' : '') +
       poolText() + (adv === 'adv' ? ' (avantaj)' : adv === 'dis' ? ' (dezavantaj)' : '');
     const parts = $('parts'); parts.textContent = '';
@@ -876,7 +952,7 @@ addEventListener('keydown', e => {
 /* ---- geçmiş ---- */
 const hist = [];
 function addHist(txt, total, crit, fumble, detail) {
-  hist.unshift({ txt, total, crit, fumble, detail });
+  hist.unshift({ txt, total, crit, fumble, detail, t: new Date() });
   if (hist.length > 20) hist.pop();
   drawHist();
 }
@@ -889,7 +965,9 @@ function drawHist() {
     const n = document.createElement('span'); n.className = 'n'; n.textContent = h.txt;
     const b = document.createElement('b'); b.textContent = h.total;
     if (h.crit) b.className = 'crit'; if (h.fumble) b.className = 'fumble';
-    li.append(n, b); ul.appendChild(li);
+    const tm = document.createElement('span'); tm.className = 'tm';
+    tm.textContent = h.t.toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+    li.append(n, b, tm); ul.appendChild(li);
   });
 }
 $('clearH').onclick = () => { hist.length = 0; drawHist(); };
