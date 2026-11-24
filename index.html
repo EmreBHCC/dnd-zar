@@ -263,12 +263,7 @@ SIDES.forEach(s => {
   ['pointerup', 'pointerleave', 'pointercancel'].forEach(t => b.addEventListener(t, () => clearTimeout(lpTimer)));
   b.onclick = () => {
     if (Date.now() - lpDone < 700) return;
-    if (quick) {                                   // hızlı atış: yalnız bu zar, hemen at
-      if (busy) return;
-      for (const k in pool) delete pool[k];
-      $('expr').value = ''; pool[s] = 1; render(); doRoll();
-      return;
-    }
+    if (quick) { quickTap(s); return; }
     pool[s] = (pool[s] || 0) + 1; render();
   };
   b.oncontextmenu = e => { e.preventDefault(); if (Date.now() - lpDone > 700) dec(s); };
@@ -595,7 +590,7 @@ function restHeight(geo, q) {
 /* Fizik: zarlar masada yuvarlanır, kenarlara ve birbirine çarpar. Önce tüm atış hesaplanır,
    sonra dönüş açıları sondan başa doğru çözülür; böylece zar tam önceden belirlenen yüzde durur. */
 const rnd = (a, b) => a + Math.random() * (b - a);
-function simulate(dice, hx, hz) {
+function simulate(dice, hx, hz, obstacles = []) {
   const N = Math.ceil(6.5 / DT);
   const S = dice.map((d, i) => {
     d.P = new Float32Array(N * 3); d.W = new Float32Array(N * 3);
@@ -646,6 +641,14 @@ function simulate(dice, hx, hz) {
         [a, b].forEach(s => { s.w.x += rnd(-5, 5); s.w.y += rnd(-5, 5); s.w.z += rnd(-5, 5); });
       }
     }
+    obstacles.forEach(o => S.forEach(s => {          // önceden atılıp duran zarlar: hareketsiz engel
+      if (k < s.st || Math.abs(s.p.y - o.y) > 1.4) return;
+      const dx = s.p.x - o.x, dz = s.p.z - o.z, dist = Math.hypot(dx, dz), min = RC * 2;
+      if (dist >= min || dist < 1e-6) return;
+      const nx = dx / dist, nz = dz / dist, vn = s.v.x * nx + s.v.z * nz;
+      s.p.x += nx * (min - dist); s.p.z += nz * (min - dist);
+      if (vn < 0) { s.v.x -= 1.5 * vn * nx; s.v.z -= 1.5 * vn * nz; s.w.x += rnd(-4, 4); s.w.y += rnd(-4, 4); s.w.z += rnd(-4, 4); }
+    }));
     S.forEach(s => {
       d_store(s, k);
       if (k < s.st || Math.hypot(s.v.x, s.v.z) > .2 || !s.ground) allStill = false;
@@ -662,25 +665,38 @@ function d_store(s, k) {
   d.W[k * 3] = s.w.x; d.W[k * 3 + 1] = s.w.y; d.W[k * 3 + 2] = s.w.z;
 }
 
-function throwDice(list, done) {
+/* Atış başlat. kind: 'replace' (masayı temizle, tepsi zara göre), 'quick' (temizle, hızlı atış tepsisi), 'add' (masadakilerin üstüne ekle) */
+function launch(list, kind, done, cancel) {
   if (!initStage()) return done();
-  R.dice.forEach(d => { R.scene.remove(d.grp); d.geo.dispose(); d.mat.dispose(); });
-  R.dice = [];
-  const n = list.length, { hx, hz } = trayFor(n);
-  R.hx = hx; R.hz = hz; buildRim(hx, hz); fit();
+  R.batches = R.batches || new Set();
+  if (kind !== 'add') {
+    R.epoch = (R.epoch || 0) + 1;
+    R.batches.forEach(bt => bt.cancel && bt.cancel());       // yarım kalan atışlar iptal
+    R.batches.clear();
+    R.dice.forEach(d => { R.scene.remove(d.grp); d.geo.dispose(); d.mat.dispose(); });
+    R.dice = [];
+    const { hx, hz } = trayFor(kind === 'quick' ? 10 : list.length);
+    R.hx = hx; R.hz = hz; buildRim(hx, hz); fit();
+  }
+  const ep = R.epoch, hx = R.hx, hz = R.hz;
+  const obstacles = R.dice.map(d => ({ x: d.P[(d.N - 1) * 3], y: d.P[(d.N - 1) * 3 + 1], z: d.P[(d.N - 1) * 3 + 2] }));
   // Masaya yatan zar: sonuç yüzü yukarı (+Y), yazı ekranda dik (üst = -Z)
   const qTarget = new THREE.Quaternion().setFromRotationMatrix(new THREE.Matrix4().makeBasis(V3(1, 0, 0), V3(0, 0, -1), V3(0, 1, 0)));
-  list.forEach((it, i) => {
+  const nd = list.map((it, i) => {
     const d = makeDie(it.sides, it.tens), fr = d.frames[it.face];
     d.qf = fr.qf || qTarget.clone().multiply(fr.q.clone().invert());
     d.h = restHeight(d.geo, d.qf) + .002;
     d.st = i * 5; d.it = it; d.grp.visible = false;
-    R.scene.add(d.grp); R.dice.push(d);
+    R.scene.add(d.grp);
+    return d;
   });
-  const end = simulate(R.dice, hx, hz);
+  const end = simulate(nd, hx, hz, obstacles);
   // dönüşü sondan başa çöz: son duruş = qf
-  R.dice.forEach(d => {
-    d.Q = new Float32Array(end * 4);
+  const t0 = performance.now();
+  const batch = { left: nd.length, cancel, done: () => { R.batches.delete(batch); if (ep !== R.epoch) return; done(); } };
+  R.batches.add(batch);
+  nd.forEach(d => {
+    d.N = end; d.Q = new Float32Array(end * 4); d.t0 = t0; d.done = false; d.batch = batch;
     const q = d.qf.clone(), qr = new THREE.Quaternion(), ax = V3(0, 0, 0);
     q.toArray(d.Q, (end - 1) * 4);
     for (let i = end - 2; i >= 0; i--) {
@@ -689,12 +705,19 @@ function throwDice(list, done) {
       if (m > 1e-9) { qr.setFromAxisAngle(ax.divideScalar(m), -m * DT); q.premultiply(qr).normalize(); }
       q.toArray(d.Q, i * 4);
     }
+    R.dice.push(d);
   });
-  const t0 = performance.now(), total = end * DT + .3;
+  startLoop();
+}
+function startLoop() {
+  if (R.looping) return;
+  R.looping = true;
   const qa = new THREE.Quaternion(), qb = new THREE.Quaternion();
   (function frame(now) {
-    const el = (now - t0) / 1000, idx = Math.min(el / DT, end - 1), i0 = Math.floor(idx), i1 = Math.min(i0 + 1, end - 1), f = idx - i0;
-    R.dice.forEach(d => {
+    let active = false;
+    R.dice.slice().forEach(d => {
+      if (d.done) return;
+      const el = (now - d.t0) / 1000, idx = Math.min(el / DT, d.N - 1), i0 = Math.floor(idx), i1 = Math.min(i0 + 1, d.N - 1), f = idx - i0;
       d.grp.visible = i0 >= d.st;
       d.grp.position.set(
         d.P[i0 * 3] + (d.P[i1 * 3] - d.P[i0 * 3]) * f,
@@ -702,24 +725,96 @@ function throwDice(list, done) {
         d.P[i0 * 3 + 2] + (d.P[i1 * 3 + 2] - d.P[i0 * 3 + 2]) * f);
       qa.fromArray(d.Q, i0 * 4); qb.fromArray(d.Q, i1 * 4);
       d.grp.quaternion.copy(qa.slerp(qb, f));
-    });
-    R.renderer.render(R.scene, R.camera);
-    if (el < total) return requestAnimationFrame(frame);
-    R.dice.forEach(d => {
+      if (el < d.N * DT + .3) { active = true; return; }
+      d.done = true;
       const hl = d.it.hl;
       if (hl === 'max') d.mat.emissive.set(0x6b4a10);
       if (hl === 'min') d.mat.emissive.set(0x5a0a0a);
       if (d.it.drop) { d.mat.transparent = true; d.mat.opacity = .3; }
+      if (--d.batch.left === 0) d.batch.done();
     });
     R.renderer.render(R.scene, R.camera);
-    done();
+    if (active) requestAnimationFrame(frame); else R.looping = false;
   })(performance.now());
+}
+
+/* ---- hızlı atış: dokundukça zar atılır, 5 sn dokunulmazsa tek kayıt olarak geçmişe yazılır ---- */
+const QUICK_MS = 5000;
+let qs = null;
+const hlOf = (v, s) => (v === s ? 'max' : v === 1 ? 'min' : '');
+function quickText(rs, mod) {
+  const c = {}; rs.forEach(r => { c[r.s] = (c[r.s] || 0) + 1; });
+  const t = SIDES.filter(s => c[s]).map(s => `${c[s]}d${s}`).join(' + ');
+  return t + (mod ? (mod > 0 ? ` + ${mod}` : ` - ${-mod}`) : '');
+}
+function quickStats(rs, mod) {
+  const total = rs.reduce((t, r) => t + r.v, 0) + mod;
+  const one = rs.length === 1 && rs[0].s === 20;
+  return { total, crit: one && rs[0].v === 20, fumble: one && rs[0].v === 1 };
+}
+function quickShow(force) {
+  if (!qs) return;
+  const rs = qs.rolls.filter(r => force || r.settled);
+  if (!rs.length) return;
+  const mod = +$('mod').value || 0, st = quickStats(rs, mod);
+  $('total').textContent = st.total;
+  $('total').className = 'total' + (st.crit ? ' crit' : st.fumble ? ' fumble' : '');
+  $('label').textContent = (st.crit ? 'KRİTİK! ' : st.fumble ? 'Kritik başarısızlık. ' : '') + quickText(rs, mod) + ' · hızlı atış';
+  const parts = $('parts'); parts.textContent = '';
+  rs.forEach(r => r.all.forEach(x => {
+    const c = document.createElement('span');
+    c.className = 'chip' + (x.v === r.s ? ' max' : x.v === 1 ? ' min' : '') + (x.drop ? ' drop' : '');
+    c.innerHTML = `<small>d${r.s}</small>${x.v}`;
+    parts.appendChild(c);
+  }));
+  if (mod) { const c = document.createElement('span'); c.className = 'chip'; c.innerHTML = `<small>bonus</small>${mod > 0 ? '+' : ''}${mod}`; parts.appendChild(c); }
+}
+function commitQuick(force) {
+  if (!qs) return;
+  clearTimeout(qs.timer);
+  if (!force && qs.rolls.some(r => !r.settled)) { qs.timer = setTimeout(() => commitQuick(false), 300); return; }
+  quickShow(true);
+  const rs = qs.rolls, mod = +$('mod').value || 0, st = quickStats(rs, mod);
+  addHist(quickText(rs, mod) + ' · hızlı', st.total, st.crit, st.fumble, rs.map(r => r.all.map(x => x.v).join('/')).join(', '));
+  qs = null;
+}
+function quickTap(s) {
+  if (busy) return;
+  if (!initStage()) {                                // WebGL yoksa: tek zar, hemen at
+    for (const k in pool) delete pool[k];
+    $('expr').value = ''; pool[s] = 1; render(); doRoll();
+    return;
+  }
+  if (qs && qs.rolls.length >= 24) commitQuick(true);
+  const fresh = !qs;
+  if (fresh) qs = { rolls: [], timer: 0 };
+  for (const k in pool) delete pool[k];
+  $('expr').value = ''; pool[s] = 1; render();
+  const adv = s === 20 ? mode : 'norm', v = rand(s);
+  let items, r;
+  if (s === 100) {
+    items = [{ sides: 10, tens: true, face: v === 100 ? 0 : Math.floor(v / 10) }, { sides: 10, tens: false, face: v === 100 ? 0 : v % 10 }];
+    r = { s, v, all: [{ v }] };
+  } else if (adv !== 'norm') {                       // avantaj/dezavantaj: iki d20, biri sayılır
+    const b = rand(20), keep = adv === 'adv' ? Math.max(v, b) : Math.min(v, b), dropFirst = v !== keep;
+    items = [{ sides: 20, face: v, hl: hlOf(v, 20), drop: dropFirst }, { sides: 20, face: b, hl: hlOf(b, 20), drop: !dropFirst }];
+    r = { s, v: keep, all: [{ v, drop: dropFirst }, { v: b, drop: !dropFirst }] };
+  } else {
+    items = [{ sides: s, face: s === 10 ? v % 10 : v, hl: hlOf(v, s) }];
+    r = { s, v, all: [{ v }] };
+  }
+  qs.rolls.push(r);
+  if (fresh) { $('total').className = 'total'; $('total').textContent = '…'; $('label').textContent = ''; $('parts').textContent = ''; }
+  launch(items, fresh ? 'quick' : 'add', () => { r.settled = true; quickShow(false); });
+  clearTimeout(qs.timer);
+  qs.timer = setTimeout(() => commitQuick(false), QUICK_MS);
 }
 
 /* ---- atış ---- */
 let busy = false;
 function doRoll() {
   if (busy) return;
+  if (qs) commitQuick(true);                         // hızlı atış açıksa önce onu geçmişe yaz
   if ($('expr').value.trim() && !applyExpr()) return;
   const sides = Object.keys(pool).map(Number).sort((a, b) => a - b);
   if (!sides.length) { $('err').textContent = 'Önce bir zar seç.'; return; }
@@ -770,7 +865,7 @@ function doRoll() {
   }));
   busy = true;
   $('total').className = 'total'; $('total').textContent = '…'; $('label').textContent = ''; $('parts').textContent = '';
-  throwDice(list.slice(0, 24), show);
+  launch(list.slice(0, 24), 'replace', show, () => { busy = false; });
 }
 
 $('roll').onclick = doRoll;
@@ -833,7 +928,7 @@ mkSwatches('swBody', BODIES, () => bodyKey, k => { bodyKey = k; localStorage.set
 mkSwatches('swInk', INKS, () => inkKey, k => { inkKey = k; localStorage.setItem('zarYazi', k); restyle(); }, 'Yazı');
 applyTable();
 $('quick').checked = quick;
-$('quick').onchange = () => { quick = $('quick').checked; localStorage.setItem('zarHizli', quick ? '1' : '0'); };
+$('quick').onchange = () => { quick = $('quick').checked; if (!quick) commitQuick(true); localStorage.setItem('zarHizli', quick ? '1' : '0'); };
 const setBtn = $('setBtn'), setPanel = $('setPanel');
 function togglePanel(open) {
   setPanel.hidden = !open; setBtn.setAttribute('aria-expanded', String(open));
