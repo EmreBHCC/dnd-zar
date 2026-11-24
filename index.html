@@ -57,8 +57,11 @@
   .result { text-align: center; padding: 8px 0 2px; }
   .bonus { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; flex: 1 1 100%; }
   .seg button { min-width: 38px; }
-  .stage { position: relative; width: 100%; height: 190px; }
+  .stage { position: relative; width: 100%; height: 230px; border-radius: 12px; overflow: hidden;
+           border: 3px solid #4a3322; background: #1f3a2b; }
   .stage canvas { display: block; width: 100%; height: 100%; }
+  .stage::after { content: ""; position: absolute; inset: 0; pointer-events: none; border-radius: 9px;
+                  box-shadow: inset 0 0 55px rgba(0,0,0,.65); }
   .total { font-size: 4.2rem; font-weight: 800; line-height: 1; font-variant-numeric: tabular-nums; }
   .total.crit { color: var(--gold); }
   .total.fumble { color: var(--red); }
@@ -347,9 +350,10 @@ function makeDie(sides, tens) {
   const cl = faces(geo), vals = assign(cl, sides);
   const grp = new THREE.Group();
   const mat = new THREE.MeshStandardMaterial({ color: 0x7c2b22, roughness: .4, metalness: .12, flatShading: true });
-  grp.add(new THREE.Mesh(geo, mat));
+  const body = new THREE.Mesh(geo, mat); body.castShadow = true; grp.add(body);
   const frames = {};
   cl.forEach((f, i) => {
+    if (sides === 4) return;
     const n = f.n;
     let up;
     if (sides === 6) up = Math.abs(n.y) > .9 ? V3(0, 0, 1) : V3(0, 1, 0);
@@ -366,41 +370,88 @@ function makeDie(sides, tens) {
     m.position.copy(f.c).addScaledVector(n, .006);
     m.quaternion.copy(q);
     grp.add(m);
-    frames[vals[i]] = q;
+    frames[vals[i]] = { q };
   });
+  if (sides === 4) {   // d4: sayı köşelerde; sonuç = yukarı bakan köşenin sayısı
+    const gv = [];
+    cl.forEach(f => f.v.forEach(p => { if (!gv.some(q => q.distanceToSquared(p) < 1e-8)) gv.push(p); }));
+    cl.forEach(f => f.v.forEach(p => {
+      const k = gv.findIndex(q => q.distanceToSquared(p) < 1e-8);
+      const up = p.clone().sub(f.c); up.sub(f.n.clone().multiplyScalar(up.dot(f.n))).normalize();
+      const q = new THREE.Quaternion().setFromRotationMatrix(new THREE.Matrix4().makeBasis(up.clone().cross(f.n), up, f.n));
+      const m = new THREE.Mesh(new THREE.PlaneGeometry(.5, .5),
+        new THREE.MeshBasicMaterial({ map: labelTex(String(k + 1)), transparent: true, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2 }));
+      m.position.copy(f.c).addScaledVector(p.clone().sub(f.c), .58).addScaledVector(f.n, .006);
+      m.quaternion.copy(q); grp.add(m);
+    }));
+    const yaw = new THREE.Quaternion().setFromAxisAngle(V3(0, 1, 0), Math.random() * 6.28);
+    gv.forEach((p, k) => { frames[k + 1] = { qf: new THREE.Quaternion().setFromUnitVectors(p.clone().normalize(), V3(0, 1, 0)).premultiply(yaw) }; });
+  }
   return { grp, mat, frames, geo };
 }
 
-let R = null;
+let R = null, keyLight = null;
+function feltTexture() {
+  const c = document.createElement('canvas'); c.width = c.height = 256;
+  const x = c.getContext('2d');
+  x.fillStyle = '#2b4a37'; x.fillRect(0, 0, 256, 256);
+  const img = x.getImageData(0, 0, 256, 256);
+  for (let i = 0; i < img.data.length; i += 4) {          // keçe tanesi
+    const n = (Math.random() - .5) * 26;
+    img.data[i] += n; img.data[i + 1] += n; img.data[i + 2] += n;
+  }
+  x.putImageData(img, 0, 0);
+  const t = new THREE.CanvasTexture(c);
+  t.wrapS = t.wrapT = THREE.RepeatWrapping; t.repeat.set(24, 24); t.anisotropy = 4;
+  return t;
+}
 function initStage() {
   if (R) return true;
   if (typeof THREE === 'undefined') return false;
   try {
     const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
     renderer.setPixelRatio(Math.min(devicePixelRatio || 1, 2));
+    renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     $('stage').appendChild(renderer.domElement);
-    const scene = new THREE.Scene(), camera = new THREE.PerspectiveCamera(35, 1, .1, 100);
-    scene.add(new THREE.AmbientLight(0xffffff, 1.1));
-    const key = new THREE.DirectionalLight(0xfff0d8, 3); key.position.set(-3, 6, 6); scene.add(key);
-    const rim = new THREE.PointLight(0xffa060, 45, 40); rim.position.set(5, 2, 6); scene.add(rim);
+    const scene = new THREE.Scene(), camera = new THREE.PerspectiveCamera(35, 1, .1, 120);
+    scene.fog = new THREE.Fog(0x1f3a2b, 22, 48);
+    scene.add(new THREE.AmbientLight(0xffffff, .85));
+    keyLight = new THREE.DirectionalLight(0xfff0d8, 3.2);
+    keyLight.position.set(-4, 10, 5); keyLight.castShadow = true;
+    keyLight.shadow.mapSize.set(1024, 1024); keyLight.shadow.bias = -0.0008; keyLight.shadow.radius = 4;
+    keyLight.shadow.camera.near = 1; keyLight.shadow.camera.far = 30;
+    scene.add(keyLight);
+    const rim = new THREE.PointLight(0xffa060, 35, 40); rim.position.set(6, 3, 6); scene.add(rim);
+    const table = new THREE.Mesh(new THREE.PlaneGeometry(120, 120),
+      new THREE.MeshStandardMaterial({ map: feltTexture(), roughness: 1, metalness: 0 }));
+    table.rotation.x = -Math.PI / 2; table.receiveShadow = true;
+    scene.add(table);
     R = { renderer, scene, camera, dice: [], cols: 1, rows: 1 };
     return true;
   } catch (e) { console.warn('WebGL yok:', e); return false; }
 }
-const S = 2.5, CDIR = V3(0, .3, 1).normalize();
+const S = 2.6, CDIR = V3(0, Math.sin(THREE.MathUtils.degToRad(58)), Math.cos(THREE.MathUtils.degToRad(58))).normalize();
 function fit() {
-  const stage = $('stage'), w = stage.clientWidth || 300, h = 190 + (R.rows - 1) * 120;
+  const stage = $('stage'), w = stage.clientWidth || 300, h = 230 + (R.rows - 1) * 70;
   stage.style.height = h + 'px';
   R.renderer.setSize(w, h);
   R.camera.aspect = w / h; R.camera.updateProjectionMatrix();
   const t = Math.tan(THREE.MathUtils.degToRad(17.5));
-  const z = Math.max((R.rows * S / 2 + .5) / t, (R.cols * S / 2 + .3) / (t * R.camera.aspect));
+  const z = Math.max((R.rows * S * .55 + 1.6) / t, (R.cols * S / 2 + 1) / (t * R.camera.aspect));
   R.camera.position.copy(CDIR).multiplyScalar(z);
   R.camera.lookAt(0, 0, 0);
+  const span = Math.max(R.cols, R.rows) * S / 2 + 9, sc = keyLight.shadow.camera;
+  sc.left = -span; sc.right = span; sc.top = span; sc.bottom = -span; sc.updateProjectionMatrix();
   R.renderer.render(R.scene, R.camera);
 }
 addEventListener('resize', () => { if (R && R.dice.length) fit(); });
 
+function restHeight(geo, q) {
+  const pos = geo.attributes.position, v = V3(0, 0, 0);
+  let m = 0;
+  for (let i = 0; i < pos.count; i++) m = Math.min(m, v.fromBufferAttribute(pos, i).applyQuaternion(q).y);
+  return -m;
+}
 const ease = t => 1 - Math.pow(1 - t, 3);
 function throwDice(list, done) {
   if (!initStage()) return done();
@@ -408,25 +459,37 @@ function throwDice(list, done) {
   R.dice = [];
   const n = list.length, cols = n <= 6 ? n : Math.ceil(n / Math.ceil(n / 6)), rows = Math.ceil(n / cols);
   R.cols = cols; R.rows = rows; fit();
-  const qCam = new THREE.Quaternion().setFromUnitVectors(V3(0, 0, 1), CDIR);
+  // Masaya yatan zar: sonuç yüzü yukarı (+Y), yazı ekranda dik (üst = -Z)
+  const qTarget = new THREE.Quaternion().setFromRotationMatrix(new THREE.Matrix4().makeBasis(V3(1, 0, 0), V3(0, 0, -1), V3(0, 1, 0)));
+  const reach = cols * S / 2 + 8;
   list.forEach((it, i) => {
-    const d = makeDie(it.sides, it.tens);
+    const d = makeDie(it.sides, it.tens), fr = d.frames[it.face];
     const c = i % cols, r = Math.floor(i / cols), inRow = Math.min(cols, n - r * cols);
-    d.tx = (c - (inRow - 1) / 2) * S; d.ty = -(r - (rows - 1) / 2) * S;
-    d.x0 = d.tx + (Math.random() - .5) * 3; d.z0 = (Math.random() - .5) * 2;
-    d.qf = qCam.clone().multiply(d.frames[it.face].clone().invert());   // sonuç yüzü kameraya baksın
-    d.axis = V3(Math.random() - .5, Math.random() - .5, Math.random() - .5).normalize();
-    d.th0 = 6 + Math.random() * 6;
-    d.delay = i * .05; d.it = it;
+    d.tx = (c - (inRow - 1) / 2) * S; d.tz = (r - (rows - 1) / 2) * S;
+    // zar sol-ön köşeden atılır, masada yuvarlanarak yerine gelir
+    d.x0 = -reach - Math.random() * 3; d.z0 = d.tz + 2 + Math.random() * 3;
+    const dx = d.tx - d.x0, dz = d.tz - d.z0, dist = Math.hypot(dx, dz);
+    d.roll = V3(dz / dist, 0, -dx / dist);                          // yuvarlanma ekseni = Y × yön
+    d.thRoll = dist * (.85 + Math.random() * .2);                    // yol = açı: kayma yok
+    d.spin = V3(Math.random() - .5, Math.random() - .5, Math.random() - .5).normalize();
+    d.thSpin = (Math.random() < .5 ? -1 : 1) * 2 * Math.PI * (1 + Math.floor(Math.random() * 2));
+    d.qf = fr.qf || qTarget.clone().multiply(fr.q.clone().invert());
+    d.h = restHeight(d.geo, d.qf) + .002;                            // zarın en alt köşesi masaya değsin
+    d.delay = i * .06; d.it = it;
     R.scene.add(d.grp); R.dice.push(d);
   });
-  const D = 1.35, t0 = performance.now(), total = D + n * .05;
+  const D = 1.7, t0 = performance.now(), total = D + n * .06;
+  const qa = new THREE.Quaternion(), qb = new THREE.Quaternion();
   (function frame(now) {
     const el = (now - t0) / 1000;
     R.dice.forEach(d => {
-      const t = Math.min(Math.max((el - d.delay) / D, 0), 1), e = ease(t);
-      d.grp.position.set(d.x0 + (d.tx - d.x0) * e, d.ty + 3.2 * Math.pow(1 - t, 2) * Math.abs(Math.cos(2.5 * Math.PI * t)), d.z0 * (1 - e));
-      d.grp.quaternion.setFromAxisAngle(d.axis, d.th0 * (1 - e)).multiply(d.qf);
+      const t = Math.min(Math.max((el - d.delay) / D, 0), 1);
+      const e = 1 - Math.pow(1 - t, 2.4);                            // sürtünmeyle yavaşlama
+      const hop = 3.4 * Math.pow(1 - t, 2.2) * Math.abs(Math.cos(3.5 * Math.PI * t));
+      d.grp.position.set(d.x0 + (d.tx - d.x0) * e, d.h + hop, d.z0 + (d.tz - d.z0) * e);
+      qa.setFromAxisAngle(d.roll, d.thRoll * (1 - e));
+      qb.setFromAxisAngle(d.spin, d.thSpin * Math.pow(1 - e, 2));
+      d.grp.quaternion.copy(qa).multiply(qb).multiply(d.qf);
     });
     R.renderer.render(R.scene, R.camera);
     if (el < total + .05) return requestAnimationFrame(frame);
