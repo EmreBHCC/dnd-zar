@@ -49,7 +49,7 @@
   .seg button { background: #120f0c; color: var(--dim); border: 0; padding: 7px 11px; font: inherit; cursor: pointer; }
   .seg button[aria-pressed=true] { background: var(--accent); color: #fff; }
   .seg button:disabled { opacity: .35; cursor: not-allowed; }
-  #roll { flex: 1 1 100%; background: var(--accent); border: 0; color: #fff; font-size: 1.15rem; font-weight: 700;
+  #roll { width: 100%; background: var(--accent); border: 0; color: #fff; font-size: 1.15rem; font-weight: 700;
           padding: 13px; border-radius: 8px; cursor: pointer; letter-spacing: .06em; }
   #roll:hover { background: #cf5239; }
   #roll:focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; }
@@ -74,7 +74,13 @@
   .chip.min { border-color: var(--red); color: var(--red); }
   .chip.drop { opacity: .4; text-decoration: line-through; }
 
-  aside { grid-column: 2; grid-row: 2 / span 2; }
+  aside { grid-column: 2; grid-row: 2 / span 3; }
+  .rollwrap { display: grid; gap: 6px; }
+  .rollwrap .err { text-align: center; margin: 0; }
+  .swatches { display: flex; gap: 8px; justify-content: center; margin-top: 12px; }
+  .sw { width: 26px; height: 26px; border-radius: 50%; border: 2px solid var(--line); cursor: pointer; padding: 0; }
+  .sw[aria-pressed=true] { border-color: var(--gold); box-shadow: 0 0 0 2px #000 inset; }
+  .sw:focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; }
   #hist { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; max-height: 560px; overflow: auto; }
   #hist li { display: flex; justify-content: space-between; gap: 8px; padding: 7px 9px; background: #120f0c;
              border-radius: 6px; font-size: .9rem; }
@@ -91,6 +97,22 @@
 <body>
 <main>
   <h1>D&amp;D Zar Atıcı <span>tüm zarlar · tıkla, ekle, at</span></h1>
+
+  <section>
+    <h2>Sonuç</h2>
+    <div class="result" aria-live="polite">
+      <div class="stage" id="stage" aria-hidden="true"></div>
+      <div class="total" id="total">–</div>
+      <div class="label" id="label"></div>
+      <div class="parts" id="parts"></div>
+      <div class="swatches" id="swatches" role="group" aria-label="Masa rengi"></div>
+    </div>
+  </section>
+
+  <div class="rollwrap">
+    <button type="button" id="roll">ZAR AT</button>
+    <div class="err" id="err"></div>
+  </div>
 
   <section>
     <h2>Zarlar (tıkla = ekle, sağ tık = çıkar)</h2>
@@ -121,18 +143,6 @@
       <button type="button" class="btn" id="clear">Temizle</button>
       <input type="text" id="expr" placeholder="ya da yaz: 2d6+1d8+3" aria-label="Zar ifadesi" autocomplete="off">
       <div class="hint">Avantaj/dezavantaj yalnız d20 içindir: havuzda <b>tek d20</b> olunca açılır; ikinci bir d20 atılır, yüksek/düşük olan sayılır. Diğer zarlar (hasar, Bless d4) normal atılır. 2d20 eklemek avantaj değil, toplamdır.</div>
-      <div class="err" id="err"></div>
-      <button type="button" id="roll">ZAR AT</button>
-    </div>
-  </section>
-
-  <section>
-    <h2>Sonuç</h2>
-    <div class="result" aria-live="polite">
-      <div class="stage" id="stage" aria-hidden="true"></div>
-      <div class="total" id="total">–</div>
-      <div class="label" id="label"></div>
-      <div class="parts" id="parts"></div>
     </div>
   </section>
 
@@ -341,7 +351,7 @@ function labelTex(text) {
   x.font = `800 ${text.length > 1 ? 62 : 88}px system-ui, sans-serif`;
   x.fillText(text, 64, 62);
   if (text === '6' || text === '9') x.fillRect(44, 112, 40, 8);   // 6 ile 9 karışmasın
-  const t = new THREE.CanvasTexture(c); t.anisotropy = 4;
+  const t = new THREE.CanvasTexture(c); t.anisotropy = 4; t.colorSpace = THREE.SRGBColorSpace;
   return (texCache[text] = t);
 }
 
@@ -391,10 +401,13 @@ function makeDie(sides, tens) {
 }
 
 let R = null, keyLight = null;
-function feltTexture() {
+const TABLES = { yesil: '#1f4a33', lacivert: '#1d2b44', bordo: '#4a1d24', siyah: '#1c1c20', ahsap: '#6b4a2e' };
+let tableKey = localStorage.getItem('zarMasa');
+if (!TABLES[tableKey]) tableKey = 'lacivert';
+function feltTexture(base) {
   const c = document.createElement('canvas'); c.width = c.height = 256;
   const x = c.getContext('2d');
-  x.fillStyle = '#2b4a37'; x.fillRect(0, 0, 256, 256);
+  x.fillStyle = base; x.fillRect(0, 0, 256, 256);
   const img = x.getImageData(0, 0, 256, 256);
   for (let i = 0; i < img.data.length; i += 4) {          // keçe tanesi
     const n = (Math.random() - .5) * 26;
@@ -402,6 +415,7 @@ function feltTexture() {
   }
   x.putImageData(img, 0, 0);
   const t = new THREE.CanvasTexture(c);
+  t.colorSpace = THREE.SRGBColorSpace;
   t.wrapS = t.wrapT = THREE.RepeatWrapping; t.repeat.set(24, 24); t.anisotropy = 4;
   return t;
 }
@@ -414,7 +428,7 @@ function initStage() {
     renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     $('stage').appendChild(renderer.domElement);
     const scene = new THREE.Scene(), camera = new THREE.PerspectiveCamera(35, 1, .1, 120);
-    scene.fog = new THREE.Fog(0x1f3a2b, 22, 48);
+    scene.fog = new THREE.Fog(TABLES[tableKey], 22, 48);
     scene.add(new THREE.AmbientLight(0xffffff, .85));
     keyLight = new THREE.DirectionalLight(0xfff0d8, 3.2);
     keyLight.position.set(-4, 10, 5); keyLight.castShadow = true;
@@ -423,14 +437,14 @@ function initStage() {
     scene.add(keyLight);
     const rim = new THREE.PointLight(0xffa060, 35, 40); rim.position.set(6, 3, 6); scene.add(rim);
     const table = new THREE.Mesh(new THREE.PlaneGeometry(120, 120),
-      new THREE.MeshStandardMaterial({ map: feltTexture(), roughness: 1, metalness: 0 }));
+      new THREE.MeshStandardMaterial({ map: feltTexture(TABLES[tableKey]), roughness: 1, metalness: 0 }));
     table.rotation.x = -Math.PI / 2; table.receiveShadow = true;
     scene.add(table);
-    R = { renderer, scene, camera, dice: [], cols: 1, rows: 1 };
+    R = { renderer, scene, camera, table, dice: [], cols: 1, rows: 1 };
     return true;
   } catch (e) { console.warn('WebGL yok:', e); return false; }
 }
-const CDIR = V3(0, Math.sin(THREE.MathUtils.degToRad(80)), Math.cos(THREE.MathUtils.degToRad(80))).normalize();
+const CDIR = V3(0, Math.sin(THREE.MathUtils.degToRad(84)), Math.cos(THREE.MathUtils.degToRad(84))).normalize();
 const DT = 1 / 90, RC = 1, GRAV = -32;
 
 function trayFor(n) {
@@ -444,13 +458,14 @@ function buildRim(hx, hz) {
   [[0, hz + .45, 2 * hx + 1.8, .9], [0, -hz - .45, 2 * hx + 1.8, .9], [hx + .45, 0, .9, 2 * hz], [-hx - .45, 0, .9, 2 * hz]]
     .forEach(([x, z, w, d]) => {
       const m = new THREE.Mesh(new THREE.BoxGeometry(w, 1, d), R.rimMat);
-      m.position.set(x, .5, z); m.castShadow = m.receiveShadow = true; g.add(m);
+      m.position.set(x, .5, z); g.add(m);
     });
+  g.visible = false;                       // duvarlar yalnız çarpışma için, görünmez
   R.scene.add(g); R.rim = g;
 }
 function fit() {
   const { hx, hz } = R, stage = $('stage'), w = stage.clientWidth || 300;
-  const halfW = hx + .1, halfD = hz + .1;   // yalnız iç yüzey çerçeveye girer, kenarlar görünmez
+  const halfW = hx + .4, halfD = hz + .4;   // yalnız iç yüzey çerçeveye girer, kenarlar görünmez
   const h = Math.round(Math.min(560, Math.max(210, w * (halfD * 2 * .985 + .3) / (halfW * 2))));
   stage.style.height = h + 'px';
   R.renderer.setSize(w, h);
@@ -678,6 +693,24 @@ function drawHist() {
 }
 $('clearH').onclick = () => { hist.length = 0; drawHist(); };
 
+function applyTable() {
+  const base = TABLES[tableKey];
+  $('stage').style.background = base;
+  document.querySelectorAll('.sw').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.k === tableKey)));
+  if (R) {
+    R.table.material.map = feltTexture(base); R.table.material.needsUpdate = true;
+    R.scene.fog.color.set(base);
+    if (R.dice.length) R.renderer.render(R.scene, R.camera);
+  }
+}
+Object.keys(TABLES).forEach(k => {
+  const b = document.createElement('button');
+  b.type = 'button'; b.className = 'sw'; b.dataset.k = k; b.title = 'Masa: ' + k; b.setAttribute('aria-label', 'Masa rengi: ' + k);
+  b.style.background = TABLES[k];
+  b.onclick = () => { tableKey = k; localStorage.setItem('zarMasa', k); applyTable(); };
+  $('swatches').appendChild(b);
+});
+applyTable();
 render(); drawHist();
 </script>
 </body>
