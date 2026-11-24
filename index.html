@@ -2,7 +2,7 @@
 <html lang="tr">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>D&D Zar Atıcı</title>
 <style>
   :root {
@@ -99,7 +99,30 @@
   .hint { flex: 1 1 100%; color: var(--dim); font-size: .78rem; }
   .err { color: var(--red); font-size: .85rem; flex: 1 1 100%; min-height: 1.2em; }
 
-  @media (max-width: 760px) { main { grid-template-columns: 1fr; } aside { grid-column: 1; grid-row: auto; } }
+  .die { touch-action: manipulation; -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
+  .pmini, #clear2 { display: none; }
+  .rollrow { display: contents; }
+  @media (pointer: coarse) { .seg button, .btn { min-height: 44px; } .sw { width: 36px; height: 36px; } }
+  @media (max-width: 760px) {
+    main { grid-template-columns: 1fr; padding-bottom: 210px; }
+    aside { grid-column: 1; grid-row: auto; }
+    /* Zarlar ve ZAR AT ekranın altına sabit: sonuç hep görünür, kaydırmak gerekmez */
+    #dice { position: fixed; left: 0; right: 0; bottom: calc(96px + env(safe-area-inset-bottom)); z-index: 20;
+            display: grid; grid-template-columns: repeat(7, 1fr); gap: 2px; padding: 8px 6px 4px;
+            background: #1b1612; border-top: 1px solid var(--line); }
+    #dice .die svg { width: 44px; height: 44px; }
+    #dice .die { padding: 2px 0; }
+    #dice .die .badge { right: 2px; }
+    .rollwrap { position: fixed; left: 0; right: 0; bottom: 0; z-index: 20; background: #1b1612; box-sizing: border-box;
+                min-height: 96px; padding: 6px 10px calc(10px + env(safe-area-inset-bottom)); }
+    .pmini { display: block; text-align: center; color: var(--dim); font-size: .85rem; margin-bottom: 6px;
+             white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .rollrow { display: grid; grid-template-columns: auto 1fr; gap: 8px; }
+    #clear2 { display: inline-block; }
+    #roll { padding: 14px; }
+    .rollwrap .err { position: absolute; left: 0; right: 0; bottom: 100%; margin: 0; background: #1b1612; }
+    .rollwrap .err:empty { display: none; }
+  }
 </style>
 </head>
 <body>
@@ -130,12 +153,16 @@
   </section>
 
   <div class="rollwrap">
-    <button type="button" id="roll">ZAR AT</button>
+    <div class="pmini" id="pmini"></div>
+    <div class="rollrow">
+      <button type="button" class="btn" id="clear2">Temizle</button>
+      <button type="button" id="roll">ZAR AT</button>
+    </div>
     <div class="err" id="err"></div>
   </div>
 
   <section>
-    <h2>Zarlar (tıkla = ekle, sağ tık = çıkar)</h2>
+    <h2>Zarlar (tıkla = ekle, sağ tık / uzun bas = çıkar)</h2>
     <div class="dice" id="dice"></div>
 
     <div class="row">
@@ -209,8 +236,14 @@ SIDES.forEach(s => {
   b.innerHTML = `<svg viewBox="0 0 64 64" aria-hidden="true"><polygon points="${SHAPES[s]}"/><text x="32" y="${s===4?44:34}">${lbl}</text></svg>
     <span class="name">d${s}</span><span class="badge"></span>`;
   b.setAttribute('aria-label', `d${s} ekle`);
-  b.onclick = () => { pool[s] = (pool[s] || 0) + 1; render(); };
-  b.oncontextmenu = e => { e.preventDefault(); dec(s); };
+  let lpTimer = 0, lpDone = 0;                                  // dokunmatikte uzun basış = bir zar çıkar
+  b.addEventListener('pointerdown', e => {
+    if (e.pointerType !== 'touch') return;
+    lpTimer = setTimeout(() => { lpDone = Date.now(); dec(s); if (navigator.vibrate) navigator.vibrate(15); }, 480);
+  });
+  ['pointerup', 'pointerleave', 'pointercancel'].forEach(t => b.addEventListener(t, () => clearTimeout(lpTimer)));
+  b.onclick = () => { if (Date.now() - lpDone < 700) return; pool[s] = (pool[s] || 0) + 1; render(); };
+  b.oncontextmenu = e => { e.preventDefault(); if (Date.now() - lpDone > 700) dec(s); };
   b.onkeydown = e => { if (e.key === 'Backspace' || e.key === 'Delete') dec(s); };
   diceEl.appendChild(b);
 });
@@ -232,6 +265,7 @@ function render() {
   });
   const t = poolText();
   $('pool').textContent = t || 'Zar seç…';
+  $('pmini').textContent = t || 'Zar seç, sonra ZAR AT';
   $('pool').classList.toggle('empty', !t);
   const ok = hasOneD20();
   document.querySelectorAll('#mode button').forEach(b => {
@@ -258,6 +292,7 @@ document.querySelectorAll('#nums button').forEach(b => b.onclick = () => {
   $('mod').value = (+$('mod').value === v) ? 0 : v;   // aynı düğmeye tekrar basınca bonus kalkar
   render();
 });
+$('clear2').onclick = () => $('clear').click();
 $('clear').onclick = () => { for (const k in pool) delete pool[k]; $('mod').value = 0; $('expr').value = ''; mode = 'norm'; render(); };
 
 /* ---- ifade çözümleme: 2d6+1d8-1+3 ---- */
