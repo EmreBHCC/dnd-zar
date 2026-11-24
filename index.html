@@ -1,0 +1,381 @@
+<!doctype html>
+<html lang="tr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>D&D Zar Atıcı</title>
+<style>
+  :root {
+    --bg: #14110f; --panel: #1e1915; --line: #3a3129; --ink: #efe6d8; --dim: #9b8f80;
+    --gold: #e0b048; --red: #d9584a; --green: #6fb36f; --accent: #b8452f;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink); font: 16px/1.4 system-ui, "Segoe UI", sans-serif; }
+  main { max-width: 980px; margin: 0 auto; padding: 20px 16px 48px; display: grid; gap: 16px;
+         grid-template-columns: 1fr 300px; }
+  h1 { grid-column: 1 / -1; margin: 0; font-size: 1.3rem; letter-spacing: .04em; font-weight: 600; }
+  h1 span { color: var(--dim); font-weight: 400; font-size: .9rem; margin-left: .6em; }
+  section { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 14px; }
+  h2 { margin: 0 0 10px; font-size: .78rem; text-transform: uppercase; letter-spacing: .1em; color: var(--dim); font-weight: 600; }
+
+  .dice { display: grid; grid-template-columns: repeat(auto-fill, minmax(86px, 1fr)); gap: 10px; }
+  .die { position: relative; background: none; border: 0; padding: 4px; cursor: pointer; color: var(--ink);
+         display: grid; justify-items: center; gap: 2px; border-radius: 8px; }
+  .die:hover svg polygon { fill: #3a2c22; }
+  .die:focus-visible { outline: 2px solid var(--gold); }
+  .die svg { width: 64px; height: 64px; }
+  .die polygon { fill: #2a2119; stroke: var(--gold); stroke-width: 3; stroke-linejoin: round; transition: fill .15s; }
+  .die text { fill: var(--ink); font: 700 22px system-ui; text-anchor: middle; dominant-baseline: central; }
+  .die .name { font-size: .8rem; color: var(--dim); }
+  .die .badge { position: absolute; top: 0; right: 6px; min-width: 22px; height: 22px; border-radius: 11px;
+                background: var(--accent); color: #fff; font-size: .8rem; font-weight: 700; display: none;
+                place-items: center; padding: 0 5px; }
+  .die.has .badge { display: grid; }
+  .die.has polygon { stroke: #fff3d0; }
+
+  .row { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin-top: 14px; }
+  .pool { min-height: 1.6em; font-size: 1.1rem; font-weight: 600; flex: 1 1 100%; }
+  .pool.empty { color: var(--dim); font-weight: 400; }
+  label { color: var(--dim); font-size: .85rem; }
+  input[type=text], input[type=number] { background: #120f0c; color: var(--ink); border: 1px solid var(--line);
+         border-radius: 6px; padding: 7px 9px; font: inherit; }
+  input[type=number] { width: 64px; text-align: center; }
+  input[type=text] { flex: 1 1 140px; min-width: 0; }
+  button.btn { background: #2a2119; color: var(--ink); border: 1px solid var(--line); border-radius: 6px;
+               padding: 7px 12px; font: inherit; cursor: pointer; }
+  button.btn:hover { border-color: var(--gold); }
+  button.btn:focus-visible { outline: 2px solid var(--gold); }
+  .seg { display: inline-flex; border: 1px solid var(--line); border-radius: 6px; overflow: hidden; }
+  .seg button { background: #120f0c; color: var(--dim); border: 0; padding: 7px 11px; font: inherit; cursor: pointer; }
+  .seg button[aria-pressed=true] { background: var(--accent); color: #fff; }
+  .seg button:disabled { opacity: .35; cursor: not-allowed; }
+  #roll { flex: 1 1 100%; background: var(--accent); border: 0; color: #fff; font-size: 1.15rem; font-weight: 700;
+          padding: 13px; border-radius: 8px; cursor: pointer; letter-spacing: .06em; }
+  #roll:hover { background: #cf5239; }
+  #roll:focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; }
+
+  .result { text-align: center; padding: 8px 0 2px; }
+  .bonus { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; flex: 1 1 100%; }
+  .seg button { min-width: 38px; }
+  .stage { display: flex; flex-wrap: wrap; gap: 10px; justify-content: center; align-items: flex-end;
+           min-height: 84px; padding: 10px 0 4px; overflow: hidden; }
+  .sd { width: 70px; height: 70px; will-change: transform; filter: drop-shadow(0 8px 6px rgba(0,0,0,.55)); }
+  .sd polygon { fill: #3a2a1e; stroke: var(--gold); stroke-width: 3; stroke-linejoin: round; }
+  .sd text { fill: var(--ink); font: 800 24px system-ui; text-anchor: middle; dominant-baseline: central; }
+  .sd.rolling { animation: tumble 1s cubic-bezier(.3,.6,.4,1) both; animation-delay: var(--dl, 0s); }
+  .sd.max polygon { stroke: #fff3d0; fill: #5a4216; }
+  .sd.min polygon { stroke: var(--red); }
+  .sd.drop { opacity: .35; }
+  @keyframes tumble {
+    0%   { transform: translate(var(--x, 0), -130px) rotate(0deg) scale(.7); opacity: 0; }
+    22%  { opacity: 1; transform: translate(var(--x, 0), 0) rotate(calc(var(--r) * .4)) scale(1); }
+    42%  { transform: translate(var(--x, 0), -42px) rotate(calc(var(--r) * .68)); }
+    62%  { transform: translate(0, 0) rotate(calc(var(--r) * .88)); }
+    78%  { transform: translate(0, -12px) rotate(calc(var(--r) * .97)); }
+    100% { transform: translate(0, 0) rotate(var(--r)); }
+  }
+  .total { font-size: 4.2rem; font-weight: 800; line-height: 1; font-variant-numeric: tabular-nums; }
+  .total.crit { color: var(--gold); }
+  .total.fumble { color: var(--red); }
+  .label { color: var(--dim); min-height: 1.4em; margin-top: 6px; }
+  .parts { display: flex; flex-wrap: wrap; gap: 6px; justify-content: center; margin-top: 12px; min-height: 34px; }
+  .chip { background: #120f0c; border: 1px solid var(--line); border-radius: 6px; padding: 3px 9px;
+          font-variant-numeric: tabular-nums; font-size: .95rem; }
+  .chip small { color: var(--dim); margin-right: 4px; }
+  .chip.max { border-color: var(--gold); color: var(--gold); }
+  .chip.min { border-color: var(--red); color: var(--red); }
+  .chip.drop { opacity: .4; text-decoration: line-through; }
+
+  aside { grid-column: 2; grid-row: 2 / span 2; }
+  #hist { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; max-height: 560px; overflow: auto; }
+  #hist li { display: flex; justify-content: space-between; gap: 8px; padding: 7px 9px; background: #120f0c;
+             border-radius: 6px; font-size: .9rem; }
+  #hist .n { color: var(--dim); }
+  #hist b { font-variant-numeric: tabular-nums; }
+  #hist .crit { color: var(--gold); } #hist .fumble { color: var(--red); }
+  .empty-h { color: var(--dim); font-size: .9rem; }
+  .err { color: var(--red); font-size: .85rem; flex: 1 1 100%; min-height: 1.2em; }
+
+  @media (max-width: 760px) { main { grid-template-columns: 1fr; } aside { grid-column: 1; grid-row: auto; } }
+</style>
+</head>
+<body>
+<main>
+  <h1>D&amp;D Zar Atıcı <span>tüm zarlar · tıkla, ekle, at</span></h1>
+
+  <section>
+    <h2>Zarlar (tıkla = ekle, sağ tık = çıkar)</h2>
+    <div class="dice" id="dice"></div>
+
+    <div class="row">
+      <div class="pool empty" id="pool" aria-live="polite">Zar seç…</div>
+      <div class="bonus">
+        <label>Bonus</label>
+        <div class="seg" id="sign" role="group" aria-label="Bonus işareti">
+          <button type="button" data-sg="-1" aria-pressed="false">−</button>
+          <button type="button" data-sg="1" aria-pressed="true">+</button>
+        </div>
+        <div class="seg" id="nums" role="group" aria-label="Bonus değeri">
+          <button type="button" data-n="1" aria-pressed="false">1</button>
+          <button type="button" data-n="2" aria-pressed="false">2</button>
+          <button type="button" data-n="3" aria-pressed="false">3</button>
+          <button type="button" data-n="4" aria-pressed="false">4</button>
+          <button type="button" data-n="5" aria-pressed="false">5</button>
+        </div>
+        <input type="number" id="mod" value="0" step="1" aria-label="Bonus (özel değer)" title="Daha büyük bonus için">
+      </div>
+      <div class="seg" id="mode" role="group" aria-label="Avantaj durumu">
+        <button type="button" data-m="dis" aria-pressed="false">Dezavantaj</button>
+        <button type="button" data-m="norm" aria-pressed="true">Normal</button>
+        <button type="button" data-m="adv" aria-pressed="false">Avantaj</button>
+      </div>
+      <button type="button" class="btn" id="clear">Temizle</button>
+      <input type="text" id="expr" placeholder="ya da yaz: 2d6+1d8+3" aria-label="Zar ifadesi" autocomplete="off">
+      <div class="err" id="err"></div>
+      <button type="button" id="roll">ZAR AT</button>
+    </div>
+  </section>
+
+  <section>
+    <h2>Sonuç</h2>
+    <div class="result" aria-live="polite">
+      <div class="stage" id="stage" aria-hidden="true"></div>
+      <div class="total" id="total">–</div>
+      <div class="label" id="label"></div>
+      <div class="parts" id="parts"></div>
+    </div>
+  </section>
+
+  <aside>
+    <section>
+      <h2>Geçmiş <button type="button" class="btn" id="clearH" style="float:right;padding:2px 8px;font-size:.75rem">sil</button></h2>
+      <ul id="hist"></ul>
+      <div class="empty-h" id="emptyH">Henüz atış yok.</div>
+    </section>
+  </aside>
+</main>
+
+<script>
+const SIDES = [4, 6, 8, 10, 12, 20, 100];
+const SHAPES = {
+  4:   '32,6 58,56 6,56',
+  6:   '10,10 54,10 54,54 10,54',
+  8:   '32,4 58,32 32,60 6,32',
+  10:  '32,4 56,26 32,60 8,26',
+  12:  '32,5 58,24 48,56 16,56 6,24',
+  20:  '32,4 57,18 57,46 32,60 7,46 7,18',
+  100: '32,4 56,26 32,60 8,26'
+};
+const pool = {};          // { sides: count }
+let mode = 'norm';
+let sign = 1;
+const $ = id => document.getElementById(id);
+const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+// Yanlılık olmadan 1..n (rejection sampling)
+function rand(n) {
+  const lim = Math.floor(0x100000000 / n) * n, b = new Uint32Array(1);
+  do { crypto.getRandomValues(b); } while (b[0] >= lim);
+  return (b[0] % n) + 1;
+}
+
+/* ---- arayüz ---- */
+const diceEl = $('dice');
+SIDES.forEach(s => {
+  const b = document.createElement('button');
+  b.type = 'button'; b.className = 'die'; b.dataset.s = s;
+  const lbl = s === 100 ? '%' : s;
+  b.innerHTML = `<svg viewBox="0 0 64 64" aria-hidden="true"><polygon points="${SHAPES[s]}"/><text x="32" y="${s===4?44:34}">${lbl}</text></svg>
+    <span class="name">d${s}</span><span class="badge"></span>`;
+  b.setAttribute('aria-label', `d${s} ekle`);
+  b.onclick = () => { pool[s] = (pool[s] || 0) + 1; render(); };
+  b.oncontextmenu = e => { e.preventDefault(); dec(s); };
+  b.onkeydown = e => { if (e.key === 'Backspace' || e.key === 'Delete') dec(s); };
+  diceEl.appendChild(b);
+});
+function dec(s) { if (pool[s]) { pool[s]--; if (!pool[s]) delete pool[s]; render(); } }
+
+function poolText() {
+  const parts = SIDES.filter(s => pool[s]).map(s => `${pool[s]}d${s}`);
+  const m = +$('mod').value || 0;
+  if (m) parts.push(m > 0 ? `+${m}` : `${m}`);
+  return parts.join(' + ').replace('+ -', '- ').replace('+ +', '+ ');
+}
+function isSingleD20() { const k = Object.keys(pool); return k.length === 1 && k[0] === '20' && pool[20] === 1; }
+
+function render() {
+  document.querySelectorAll('.die').forEach(b => {
+    const c = pool[b.dataset.s] || 0;
+    b.classList.toggle('has', c > 0);
+    b.querySelector('.badge').textContent = c;
+  });
+  const t = poolText();
+  $('pool').textContent = t || 'Zar seç…';
+  $('pool').classList.toggle('empty', !t);
+  const ok = isSingleD20();
+  document.querySelectorAll('#mode button').forEach(b => {
+    b.disabled = !ok && b.dataset.m !== 'norm';
+    b.setAttribute('aria-pressed', String((ok ? mode : 'norm') === b.dataset.m));
+  });
+  const m = +$('mod').value || 0;
+  if (m) sign = m < 0 ? -1 : 1;
+  document.querySelectorAll('#sign button').forEach(b => b.setAttribute('aria-pressed', String(+b.dataset.sg === sign)));
+  document.querySelectorAll('#nums button').forEach(b => b.setAttribute('aria-pressed', String(m === sign * +b.dataset.n)));
+  $('err').textContent = '';
+}
+
+document.querySelectorAll('#mode button').forEach(b => b.onclick = () => { mode = b.dataset.m; render(); });
+$('mod').oninput = render;
+document.querySelectorAll('#sign button').forEach(b => b.onclick = () => {
+  sign = +b.dataset.sg;
+  const m = +$('mod').value || 0;
+  if (m) $('mod').value = Math.abs(m) * sign;
+  render();
+});
+document.querySelectorAll('#nums button').forEach(b => b.onclick = () => {
+  const v = sign * +b.dataset.n;
+  $('mod').value = (+$('mod').value === v) ? 0 : v;   // aynı düğmeye tekrar basınca bonus kalkar
+  render();
+});
+$('clear').onclick = () => { for (const k in pool) delete pool[k]; $('mod').value = 0; $('expr').value = ''; mode = 'norm'; render(); };
+
+/* ---- ifade çözümleme: 2d6+1d8-1+3 ---- */
+function parse(str) {
+  const s = str.replace(/\s+/g, '').toLowerCase().replace(/d%/g, 'd100');
+  if (!s) return null;
+  if (!/^[+-]?(\d*d\d+|\d+)([+-](\d*d\d+|\d+))*$/.test(s)) return { error: 'Anlaşılmadı. Örnek: 2d6+1d8+3' };
+  const out = { dice: {}, mod: 0 };
+  for (const t of s.match(/[+-]?[^+-]+/g)) {
+    const sign = t[0] === '-' ? -1 : 1, body = t.replace(/^[+-]/, '');
+    const m = body.match(/^(\d*)d(\d+)$/);
+    if (m) {
+      const n = +(m[1] || 1), sd = +m[2];
+      if (sign < 0) return { error: 'Zar çıkarma desteklenmiyor.' };
+      if (!SIDES.includes(sd) && (sd < 2 || sd > 1000)) return { error: `d${sd} geçersiz.` };
+      if (n > 100) return { error: 'En çok 100 zar.' };
+      out.dice[sd] = (out.dice[sd] || 0) + n;
+    } else out.mod += sign * +body;
+  }
+  return out;
+}
+$('expr').addEventListener('keydown', e => { if (e.key === 'Enter') { applyExpr(); doRoll(); } });
+function applyExpr() {
+  const v = $('expr').value.trim();
+  if (!v) return true;
+  const p = parse(v);
+  if (p && p.error) { $('err').textContent = p.error; return false; }
+  for (const k in pool) delete pool[k];
+  Object.assign(pool, p.dice);
+  $('mod').value = p.mod;
+  mode = 'norm';
+  render();
+  return true;
+}
+
+/* ---- atış ---- */
+let busy = false;
+function doRoll() {
+  if (busy) return;
+  if ($('expr').value.trim() && !applyExpr()) return;
+  const sides = Object.keys(pool).map(Number).sort((a, b) => a - b);
+  if (!sides.length) { $('err').textContent = 'Önce bir zar seç.'; return; }
+  const mod = +$('mod').value || 0;
+  const adv = isSingleD20() ? mode : 'norm';
+
+  // sonucu baştan belirle, animasyon yalnız görsel
+  const groups = sides.map(s => ({ s, vals: Array.from({ length: pool[s] }, () => rand(s)) }));
+  let kept = null, dropped = null;
+  if (adv !== 'norm') {
+    const a = groups[0].vals[0], b = rand(20);
+    const pick = adv === 'adv' ? Math.max(a, b) : Math.min(a, b);
+    groups[0].vals = [a, b];
+    kept = pick; dropped = a === b ? 1 : (a === pick ? 1 : 0); // atılan indeks
+    if (a === b) dropped = 1;
+    else dropped = (a === pick) ? 1 : 0;
+  }
+  const sum = adv !== 'norm' ? kept : groups.reduce((t, g) => t + g.vals.reduce((x, y) => x + y, 0), 0);
+  const total = sum + mod;
+  const single20 = isSingleD20();
+  const final = single20 ? kept ?? groups[0].vals[0] : null;
+  const crit = single20 && final === 20, fumble = single20 && final === 1;
+
+  const show = () => {
+    $('total').textContent = total;
+    $('total').className = 'total' + (crit ? ' crit' : fumble ? ' fumble' : '');
+    $('label').textContent = (crit ? 'KRİTİK! ' : fumble ? 'Kritik başarısızlık. ' : '') +
+      poolText() + (adv === 'adv' ? ' (avantaj)' : adv === 'dis' ? ' (dezavantaj)' : '');
+    const parts = $('parts'); parts.textContent = '';
+    groups.forEach(g => g.vals.forEach((v, i) => {
+      const c = document.createElement('span');
+      c.className = 'chip' + (v === g.s ? ' max' : v === 1 ? ' min' : '') + (adv !== 'norm' && i === dropped ? ' drop' : '');
+      c.innerHTML = `<small>d${g.s}</small>${v}`;
+      parts.appendChild(c);
+    }));
+    if (mod) { const c = document.createElement('span'); c.className = 'chip'; c.innerHTML = `<small>bonus</small>${mod > 0 ? '+' : ''}${mod}`; parts.appendChild(c); }
+    addHist(poolText() + (adv === 'adv' ? ' · avantaj' : adv === 'dis' ? ' · dezavantaj' : ''), total, crit, fumble,
+      groups.map(g => g.vals.join(',')).join(' | '));
+    busy = false;
+  };
+
+  // Zar sahnesi: her zar düşer, zıplar, döner, sonra yüzü görünür.
+  // (Bilerek prefers-reduced-motion'a bakmıyor: zar atmanın kendisi bu.)
+  busy = true;
+  const stage = $('stage'); stage.textContent = '';
+  const flat = [];
+  groups.forEach(g => g.vals.forEach((v, i) => flat.push({ s: g.s, v, drop: adv !== 'norm' && i === dropped })));
+  const shown = flat.slice(0, 24), els = [];
+  shown.forEach((d, i) => {
+    const ns = 'http://www.w3.org/2000/svg';
+    const svg = document.createElementNS(ns, 'svg');
+    svg.setAttribute('viewBox', '0 0 64 64');
+    svg.setAttribute('class', 'sd rolling');
+    svg.style.setProperty('--r', ((Math.random() < .5 ? -1 : 1) * 360 * (1 + rand(2))) + 'deg');
+    svg.style.setProperty('--x', ((rand(60) - 30)) + 'px');
+    svg.style.setProperty('--dl', (i * 0.04) + 's');
+    const poly = document.createElementNS(ns, 'polygon'); poly.setAttribute('points', SHAPES[d.s] || SHAPES[20]);
+    const txt = document.createElementNS(ns, 'text'); txt.setAttribute('x', 32); txt.setAttribute('y', d.s === 4 ? 44 : 34);
+    txt.textContent = rand(d.s); // yuvarlanırken değişen yüz
+    svg.append(poly, txt); stage.appendChild(svg); els.push({ svg, txt, d });
+  });
+  $('total').className = 'total'; $('total').textContent = '…'; $('label').textContent = '';
+  const cyc = setInterval(() => els.forEach(e => e.txt.textContent = rand(e.d.s)), 70);
+  setTimeout(() => {
+    clearInterval(cyc);
+    els.forEach(e => {
+      e.txt.textContent = e.d.v;
+      if (e.d.v === e.d.s) e.svg.classList.add('max'); else if (e.d.v === 1) e.svg.classList.add('min');
+      if (e.d.drop) e.svg.classList.add('drop');
+    });
+    show();
+  }, 1000 + shown.length * 40);
+}
+$('roll').onclick = doRoll;
+addEventListener('keydown', e => {
+  if (e.key === ' ' && !/INPUT|BUTTON/.test(document.activeElement.tagName)) { e.preventDefault(); doRoll(); }
+});
+
+/* ---- geçmiş ---- */
+const hist = [];
+function addHist(txt, total, crit, fumble, detail) {
+  hist.unshift({ txt, total, crit, fumble, detail });
+  if (hist.length > 30) hist.pop();
+  drawHist();
+}
+function drawHist() {
+  const ul = $('hist'); ul.textContent = '';
+  $('emptyH').style.display = hist.length ? 'none' : 'block';
+  hist.forEach(h => {
+    const li = document.createElement('li');
+    li.title = h.detail;
+    const n = document.createElement('span'); n.className = 'n'; n.textContent = h.txt;
+    const b = document.createElement('b'); b.textContent = h.total;
+    if (h.crit) b.className = 'crit'; if (h.fumble) b.className = 'fumble';
+    li.append(n, b); ul.appendChild(li);
+  });
+}
+$('clearH').onclick = () => { hist.length = 0; drawHist(); };
+
+render(); drawHist();
+</script>
+</body>
+</html>
