@@ -100,18 +100,25 @@
   .err { color: var(--red); font-size: .85rem; flex: 1 1 100%; min-height: 1.2em; }
 
   .die { touch-action: manipulation; -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
-  .pmini, #clear2 { display: none; }
+  .pmini, #clear2, .minus { display: none; }
+  .dcell { display: grid; justify-items: center; }
   .rollrow { display: contents; }
   @media (pointer: coarse) { .seg button, .btn { min-height: 44px; } .sw { width: 36px; height: 36px; } }
   @media (max-width: 760px) {
-    main { grid-template-columns: 1fr; padding-bottom: 210px; }
+    main { grid-template-columns: 1fr; padding-bottom: 250px; }
     aside { grid-column: 1; grid-row: auto; }
     /* Zarlar ve ZAR AT ekranın altına sabit: sonuç hep görünür, kaydırmak gerekmez */
     #dice { position: fixed; left: 0; right: 0; bottom: calc(96px + env(safe-area-inset-bottom)); z-index: 20;
-            display: grid; grid-template-columns: repeat(7, 1fr); gap: 2px; padding: 8px 6px 4px;
+            display: grid; grid-template-columns: repeat(7, 1fr); gap: 2px; padding: 8px 6px 8px;
             background: #1b1612; border-top: 1px solid var(--line); }
     #dice .die svg { width: 44px; height: 44px; }
     #dice .die { padding: 2px 0; }
+    #dice .die .name { display: none; }
+    #dice .minus { display: block; width: calc(100% - 6px); max-width: 48px; height: 36px; margin-top: 2px; border: 1px solid var(--line);
+                   border-radius: 8px; background: #120f0c; color: var(--ink); font: 700 1.4rem/1 system-ui; cursor: pointer; touch-action: manipulation; }
+    #dice .minus:disabled { opacity: .22; }
+    #dice .minus:not(:disabled):active { background: var(--accent); }
+    #dice .die .badge { min-width: 24px; height: 24px; font-size: .9rem; }
     #dice .die .badge { right: 2px; }
     .rollwrap { position: fixed; left: 0; right: 0; bottom: 0; z-index: 20; background: #1b1612; box-sizing: border-box;
                 min-height: 96px; padding: 6px 10px calc(10px + env(safe-area-inset-bottom)); }
@@ -245,7 +252,12 @@ SIDES.forEach(s => {
   b.onclick = () => { if (Date.now() - lpDone < 700) return; pool[s] = (pool[s] || 0) + 1; render(); };
   b.oncontextmenu = e => { e.preventDefault(); if (Date.now() - lpDone > 700) dec(s); };
   b.onkeydown = e => { if (e.key === 'Backspace' || e.key === 'Delete') dec(s); };
-  diceEl.appendChild(b);
+  const cell = document.createElement('div'); cell.className = 'dcell';
+  const m = document.createElement('button');                     // telefonda: zarın altında net bir "−"
+  m.type = 'button'; m.className = 'minus'; m.textContent = '−'; m.disabled = true;
+  m.setAttribute('aria-label', `d${s} çıkar`);
+  m.onclick = () => dec(s);
+  cell.append(b, m); diceEl.appendChild(cell);
 });
 function dec(s) { if (pool[s]) { pool[s]--; if (!pool[s]) delete pool[s]; render(); } }
 
@@ -262,6 +274,7 @@ function render() {
     const c = pool[b.dataset.s] || 0;
     b.classList.toggle('has', c > 0);
     b.querySelector('.badge').textContent = c;
+    b.parentElement.querySelector('.minus').disabled = !c;
   });
   const t = poolText();
   $('pool').textContent = t || 'Zar seç…';
