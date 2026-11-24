@@ -430,17 +430,36 @@ function initStage() {
     return true;
   } catch (e) { console.warn('WebGL yok:', e); return false; }
 }
-const S = 2.6, CDIR = V3(0, Math.sin(THREE.MathUtils.degToRad(58)), Math.cos(THREE.MathUtils.degToRad(58))).normalize();
+const CDIR = V3(0, Math.sin(THREE.MathUtils.degToRad(58)), Math.cos(THREE.MathUtils.degToRad(58))).normalize();
+const DT = 1 / 90, RC = 1, GRAV = -32;
+
+function trayFor(n) {
+  const hx = Math.max(5.5, Math.sqrt(n * 2.2 * 2.2 * 3.4 * 1.6) / 2);
+  return { hx, hz: hx / 1.6 };
+}
+function buildRim(hx, hz) {
+  if (R.rim) { R.scene.remove(R.rim); R.rim.children.forEach(m => m.geometry.dispose()); }
+  const g = new THREE.Group();
+  R.rimMat = R.rimMat || new THREE.MeshStandardMaterial({ color: 0x5a3a24, roughness: .65 });
+  [[0, hz + .45, 2 * hx + 1.8, .9], [0, -hz - .45, 2 * hx + 1.8, .9], [hx + .45, 0, .9, 2 * hz], [-hx - .45, 0, .9, 2 * hz]]
+    .forEach(([x, z, w, d]) => {
+      const m = new THREE.Mesh(new THREE.BoxGeometry(w, 1, d), R.rimMat);
+      m.position.set(x, .5, z); m.castShadow = m.receiveShadow = true; g.add(m);
+    });
+  R.scene.add(g); R.rim = g;
+}
 function fit() {
-  const stage = $('stage'), w = stage.clientWidth || 300, h = 230 + (R.rows - 1) * 70;
+  const { hx, hz } = R, stage = $('stage'), w = stage.clientWidth || 300;
+  const halfW = hx + 1, halfD = hz + 1;
+  const h = Math.round(Math.min(560, Math.max(210, w * (halfD * 2 * .88 + 1.2) / (halfW * 2))));
   stage.style.height = h + 'px';
   R.renderer.setSize(w, h);
   R.camera.aspect = w / h; R.camera.updateProjectionMatrix();
   const t = Math.tan(THREE.MathUtils.degToRad(17.5));
-  const z = Math.max((R.rows * S * .55 + 1.6) / t, (R.cols * S / 2 + 1) / (t * R.camera.aspect));
+  const z = Math.max(halfW / (t * R.camera.aspect), (halfD * .88 + .6) / t) * 1.03;
   R.camera.position.copy(CDIR).multiplyScalar(z);
   R.camera.lookAt(0, 0, 0);
-  const span = Math.max(R.cols, R.rows) * S / 2 + 9, sc = keyLight.shadow.camera;
+  const span = Math.max(hx, hz) + 4, sc = keyLight.shadow.camera;
   sc.left = -span; sc.right = span; sc.top = span; sc.bottom = -span; sc.updateProjectionMatrix();
   R.renderer.render(R.scene, R.camera);
 }
@@ -452,47 +471,119 @@ function restHeight(geo, q) {
   for (let i = 0; i < pos.count; i++) m = Math.min(m, v.fromBufferAttribute(pos, i).applyQuaternion(q).y);
   return -m;
 }
-const ease = t => 1 - Math.pow(1 - t, 3);
+
+/* Fizik: zarlar masada yuvarlanır, kenarlara ve birbirine çarpar. Önce tüm atış hesaplanır,
+   sonra dönüş açıları sondan başa doğru çözülür; böylece zar tam önceden belirlenen yüzde durur. */
+const rnd = (a, b) => a + Math.random() * (b - a);
+function simulate(dice, hx, hz) {
+  const N = Math.ceil(6.5 / DT);
+  const S = dice.map((d, i) => {
+    d.P = new Float32Array(N * 3); d.W = new Float32Array(N * 3);
+    return { d, st: i * 5, p: V3(-hx + RC + .1, rnd(3, 4.2), rnd(-hz + RC + .3, hz - RC - .3)), v: V3(0, 0, 0), w: V3(0, 0, 0), ground: false };
+  });
+  const lim = { x: hx - RC, z: hz - RC };
+  let end = N;
+  for (let k = 0; k < N; k++) {
+    let allStill = k > 60;
+    S.forEach(s => {
+      if (k < s.st) return;
+      if (k === s.st) {
+        s.v.set(rnd(13, 17), rnd(.5, 2), rnd(-3, 3));
+        s.w.set(rnd(-1, 1), rnd(-1, 1), rnd(-1, 1)).normalize().multiplyScalar(rnd(12, 20));
+      }
+      const p = s.p, v = s.v, w = s.w;
+      v.y += GRAV * DT; p.addScaledVector(v, DT);
+      const spd = Math.hypot(v.x, v.z), fl = s.d.h + (.95 - s.d.h) * Math.min(1, spd / 4);
+      s.ground = false;
+      if (p.y <= fl) {
+        p.y = fl;
+        if (v.y < -1.8) { v.y = -v.y * .42; w.x += rnd(-4, 4); w.z += rnd(-4, 4); } else v.y = 0;
+        s.ground = v.y === 0;
+      }
+      if (s.ground) {                                   // sürtünme + yuvarlanma bağı
+        const f = Math.exp(-(k > 360 ? 3 : .6) * DT), sp = Math.hypot(v.x, v.z), ns = Math.max(0, sp * f - 2 * DT);
+        if (sp > 1e-6) { v.x *= ns / sp; v.z *= ns / sp; }
+        const R0 = .85, tw = V3(v.z / R0, 0, -v.x / R0);   // Y × v / R
+        w.lerp(tw, Math.min(1, 9 * DT));
+      }
+      if (p.x > lim.x) { p.x = lim.x; v.x = -Math.abs(v.x) * .62; w.y += rnd(-3, 3); w.z += rnd(-3, 3); }
+      if (p.x < -lim.x) { p.x = -lim.x; v.x = Math.abs(v.x) * .62; w.y += rnd(-3, 3); w.z += rnd(-3, 3); }
+      if (p.z > lim.z) { p.z = lim.z; v.z = -Math.abs(v.z) * .62; w.x += rnd(-3, 3); w.y += rnd(-3, 3); }
+      if (p.z < -lim.z) { p.z = -lim.z; v.z = Math.abs(v.z) * .62; w.x += rnd(-3, 3); w.y += rnd(-3, 3); }
+    });
+    for (let i = 0; i < S.length; i++) for (let j = i + 1; j < S.length; j++) {   // zar-zar çarpışması
+      const a = S[i], b = S[j];
+      if (k < a.st || k < b.st || Math.abs(a.p.y - b.p.y) > 1.4) continue;
+      const dx = a.p.x - b.p.x, dz = a.p.z - b.p.z, dist = Math.hypot(dx, dz), min = RC * 2;
+      if (dist >= min || dist < 1e-6) continue;
+      const nx = dx / dist, nz = dz / dist, ov = (min - dist) / 2;
+      a.p.x += nx * ov; a.p.z += nz * ov; b.p.x -= nx * ov; b.p.z -= nz * ov;
+      const vn = (a.v.x - b.v.x) * nx + (a.v.z - b.v.z) * nz;
+      if (vn < 0) {
+        const j2 = -(1 + .55) * vn / 2;
+        a.v.x += j2 * nx; a.v.z += j2 * nz; b.v.x -= j2 * nx; b.v.z -= j2 * nz;
+        [a, b].forEach(s => { s.w.x += rnd(-5, 5); s.w.y += rnd(-5, 5); s.w.z += rnd(-5, 5); });
+      }
+    }
+    S.forEach(s => {
+      d_store(s, k);
+      if (k < s.st || Math.hypot(s.v.x, s.v.z) > .2 || !s.ground) allStill = false;
+    });
+    if (allStill) { end = k + 1; break; }
+  }
+  // sonda hepsi durmuş say
+  S.forEach(s => { const d = s.d, i = end - 1; d.W[i * 3] = d.W[i * 3 + 1] = d.W[i * 3 + 2] = 0; });
+  return end;
+}
+function d_store(s, k) {
+  const d = s.d;
+  d.P[k * 3] = s.p.x; d.P[k * 3 + 1] = s.p.y; d.P[k * 3 + 2] = s.p.z;
+  d.W[k * 3] = s.w.x; d.W[k * 3 + 1] = s.w.y; d.W[k * 3 + 2] = s.w.z;
+}
+
 function throwDice(list, done) {
   if (!initStage()) return done();
   R.dice.forEach(d => { R.scene.remove(d.grp); d.geo.dispose(); d.mat.dispose(); });
   R.dice = [];
-  const n = list.length, cols = n <= 6 ? n : Math.ceil(n / Math.ceil(n / 6)), rows = Math.ceil(n / cols);
-  R.cols = cols; R.rows = rows; fit();
+  const n = list.length, { hx, hz } = trayFor(n);
+  R.hx = hx; R.hz = hz; buildRim(hx, hz); fit();
   // Masaya yatan zar: sonuç yüzü yukarı (+Y), yazı ekranda dik (üst = -Z)
   const qTarget = new THREE.Quaternion().setFromRotationMatrix(new THREE.Matrix4().makeBasis(V3(1, 0, 0), V3(0, 0, -1), V3(0, 1, 0)));
-  const reach = cols * S / 2 + 8;
   list.forEach((it, i) => {
     const d = makeDie(it.sides, it.tens), fr = d.frames[it.face];
-    const c = i % cols, r = Math.floor(i / cols), inRow = Math.min(cols, n - r * cols);
-    d.tx = (c - (inRow - 1) / 2) * S; d.tz = (r - (rows - 1) / 2) * S;
-    // zar sol-ön köşeden atılır, masada yuvarlanarak yerine gelir
-    d.x0 = -reach - Math.random() * 3; d.z0 = d.tz + 2 + Math.random() * 3;
-    const dx = d.tx - d.x0, dz = d.tz - d.z0, dist = Math.hypot(dx, dz);
-    d.roll = V3(dz / dist, 0, -dx / dist);                          // yuvarlanma ekseni = Y × yön
-    d.thRoll = dist * (.85 + Math.random() * .2);                    // yol = açı: kayma yok
-    d.spin = V3(Math.random() - .5, Math.random() - .5, Math.random() - .5).normalize();
-    d.thSpin = (Math.random() < .5 ? -1 : 1) * 2 * Math.PI * (1 + Math.floor(Math.random() * 2));
     d.qf = fr.qf || qTarget.clone().multiply(fr.q.clone().invert());
-    d.h = restHeight(d.geo, d.qf) + .002;                            // zarın en alt köşesi masaya değsin
-    d.delay = i * .06; d.it = it;
+    d.h = restHeight(d.geo, d.qf) + .002;
+    d.st = i * 5; d.it = it; d.grp.visible = false;
     R.scene.add(d.grp); R.dice.push(d);
   });
-  const D = 1.7, t0 = performance.now(), total = D + n * .06;
+  const end = simulate(R.dice, hx, hz);
+  // dönüşü sondan başa çöz: son duruş = qf
+  R.dice.forEach(d => {
+    d.Q = new Float32Array(end * 4);
+    const q = d.qf.clone(), qr = new THREE.Quaternion(), ax = V3(0, 0, 0);
+    q.toArray(d.Q, (end - 1) * 4);
+    for (let i = end - 2; i >= 0; i--) {
+      ax.set(d.W[i * 3], d.W[i * 3 + 1], d.W[i * 3 + 2]);
+      const m = ax.length();
+      if (m > 1e-9) { qr.setFromAxisAngle(ax.divideScalar(m), -m * DT); q.premultiply(qr).normalize(); }
+      q.toArray(d.Q, i * 4);
+    }
+  });
+  const t0 = performance.now(), total = end * DT + .3;
   const qa = new THREE.Quaternion(), qb = new THREE.Quaternion();
   (function frame(now) {
-    const el = (now - t0) / 1000;
+    const el = (now - t0) / 1000, idx = Math.min(el / DT, end - 1), i0 = Math.floor(idx), i1 = Math.min(i0 + 1, end - 1), f = idx - i0;
     R.dice.forEach(d => {
-      const t = Math.min(Math.max((el - d.delay) / D, 0), 1);
-      const e = 1 - Math.pow(1 - t, 2.4);                            // sürtünmeyle yavaşlama
-      const hop = 3.4 * Math.pow(1 - t, 2.2) * Math.abs(Math.cos(3.5 * Math.PI * t));
-      d.grp.position.set(d.x0 + (d.tx - d.x0) * e, d.h + hop, d.z0 + (d.tz - d.z0) * e);
-      qa.setFromAxisAngle(d.roll, d.thRoll * (1 - e));
-      qb.setFromAxisAngle(d.spin, d.thSpin * Math.pow(1 - e, 2));
-      d.grp.quaternion.copy(qa).multiply(qb).multiply(d.qf);
+      d.grp.visible = i0 >= d.st;
+      d.grp.position.set(
+        d.P[i0 * 3] + (d.P[i1 * 3] - d.P[i0 * 3]) * f,
+        d.P[i0 * 3 + 1] + (d.P[i1 * 3 + 1] - d.P[i0 * 3 + 1]) * f,
+        d.P[i0 * 3 + 2] + (d.P[i1 * 3 + 2] - d.P[i0 * 3 + 2]) * f);
+      qa.fromArray(d.Q, i0 * 4); qb.fromArray(d.Q, i1 * 4);
+      d.grp.quaternion.copy(qa.slerp(qb, f));
     });
     R.renderer.render(R.scene, R.camera);
-    if (el < total + .05) return requestAnimationFrame(frame);
+    if (el < total) return requestAnimationFrame(frame);
     R.dice.forEach(d => {
       const hl = d.it.hl;
       if (hl === 'max') d.mat.emissive.set(0x6b4a10);
