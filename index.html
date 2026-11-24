@@ -110,7 +110,8 @@
                 font-size: .8rem; font-weight: 800; display: none; place-items: center; padding: 0 5px; box-shadow: 0 2px 6px rgba(0, 0, 0, .5); }
   .die.has .badge { display: grid; }
 
-  .row { display: grid; gap: 14px; margin-top: 16px; }
+  .row { display: grid; grid-template-columns: minmax(0, 1fr); gap: 14px; margin-top: 16px; }
+  .row > * { min-width: 0; }
   .pool { min-height: 2.6em; display: grid; place-items: center; padding: 8px 12px; font-size: 1.12rem; font-weight: 700; background: #110d0a;
           border: 1px dashed #4a3d31; border-radius: 12px; text-align: center; }
   .pool.empty { color: var(--dim); font-weight: 400; font-size: 1rem; }
@@ -118,8 +119,9 @@
   .bonus { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 8px; align-items: stretch; }
   .bonus .ttl { grid-column: 1 / -1; }
   .bonus .step { grid-column: 1 / -1; display: grid; grid-template-columns: 52px minmax(0, 1fr) 52px; }
-  #nums, #mode { display: flex; }
-  #nums button, #mode button { flex: 1; }
+  #nums, #mode { display: flex; min-width: 0; }
+  #nums button, #mode button { flex: 1; min-width: 0; padding-left: 4px; padding-right: 4px; }
+  .bonus > * { min-width: 0; }
   .exprrow { display: flex; gap: 10px; }
   .exprrow input { flex: 1; min-width: 0; }
   details.hintd { color: var(--dim); font-size: .8rem; }
@@ -197,6 +199,7 @@
     .rollwrap .err { position: absolute; left: 0; right: 0; bottom: 100%; margin: 0; background: #1b1612; }
     .rollwrap .err:empty { display: none; }
     #hist { grid-template-columns: 1fr; }
+    .seg button { padding-left: 8px; padding-right: 8px; }
   }
 </style>
 </head>
