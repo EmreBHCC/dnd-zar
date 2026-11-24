@@ -20,6 +20,14 @@
   .panel { position: absolute; right: 0; top: calc(100% + 6px); z-index: 5; background: var(--panel); border: 1px solid var(--line);
            border-radius: 10px; padding: 12px 14px; box-shadow: 0 10px 30px rgba(0,0,0,.5); min-width: 250px; max-width: 290px; }
   .panel[hidden] { display: none; }
+  .step { display: inline-flex; align-items: stretch; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+  .step button { width: 40px; min-height: 38px; background: #1c1712; color: var(--ink); border: 0; font: 700 1.3rem/1 system-ui; cursor: pointer;
+                 touch-action: manipulation; -webkit-user-select: none; user-select: none; }
+  .step button:active { background: var(--accent); }
+  .step button:focus-visible { outline: 2px solid var(--gold); outline-offset: -2px; }
+  .step input[type=number] { width: 58px; border: 0; border-left: 1px solid var(--line); border-right: 1px solid var(--line); border-radius: 0;
+                             text-align: center; -moz-appearance: textfield; appearance: textfield; }
+  .step input::-webkit-inner-spin-button, .step input::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
   .tog { display: flex; gap: 10px; align-items: center; color: var(--ink); font-size: .9rem; cursor: pointer; }
   .tog input { width: 22px; height: 22px; accent-color: var(--accent); flex: none; }
   .panel h2 { margin: 14px 0 8px; }
@@ -186,7 +194,11 @@
           <button type="button" data-n="4" aria-pressed="false">4</button>
           <button type="button" data-n="5" aria-pressed="false">5</button>
         </div>
-        <input type="number" id="mod" value="0" step="1" aria-label="Bonus (özel değer)" title="Daha büyük bonus için">
+        <div class="step" role="group" aria-label="Bonus sayacı">
+          <button type="button" id="modM" aria-label="Bonusu azalt">−</button>
+          <input type="number" id="mod" value="0" step="1" min="-99" max="99" aria-label="Bonus (özel değer)" inputmode="numeric">
+          <button type="button" id="modP" aria-label="Bonusu artır">+</button>
+        </div>
       </div>
       <div class="seg" id="mode" role="group" aria-label="Avantaj durumu">
         <button type="button" data-m="dis" aria-pressed="false">Dezavantaj</button>
@@ -297,6 +309,20 @@ function render() {
 
 document.querySelectorAll('#mode button').forEach(b => b.onclick = () => { mode = b.dataset.m; render(); });
 $('mod').oninput = render;
+// Basamaklı sayaç: bas = ±1, basılı tut = hızla tekrarla
+function bumpMod(d) { $('mod').value = Math.max(-99, Math.min(99, (+$('mod').value || 0) + d)); render(); }
+[['modM', -1], ['modP', 1]].forEach(([id, d]) => {
+  const b = $(id); let t1 = 0, t2 = 0;
+  const stop = () => { clearTimeout(t1); clearInterval(t2); };
+  b.addEventListener('pointerdown', e => {
+    if (e.button) return;
+    bumpMod(d); stop();
+    t1 = setTimeout(() => { t2 = setInterval(() => bumpMod(d), 80); }, 420);
+  });
+  ['pointerup', 'pointerleave', 'pointercancel'].forEach(t => b.addEventListener(t, stop));
+  b.addEventListener('click', e => { if (e.detail === 0) bumpMod(d); });   // klavye (Enter/Boşluk)
+  b.addEventListener('contextmenu', e => e.preventDefault());
+});
 document.querySelectorAll('#sign button').forEach(b => b.onclick = () => {
   sign = +b.dataset.sg;
   const m = +$('mod').value || 0;
