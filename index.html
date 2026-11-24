@@ -16,9 +16,12 @@
   main > section, main > .rollwrap, aside { min-width: 0; }
   .top { grid-column: 1 / -1; display: flex; justify-content: space-between; align-items: center; gap: 12px; position: relative; }
   .settings { position: relative; }
+  #setBtn { white-space: nowrap; }
   .panel { position: absolute; right: 0; top: calc(100% + 6px); z-index: 5; background: var(--panel); border: 1px solid var(--line);
-           border-radius: 10px; padding: 12px 14px; box-shadow: 0 10px 30px rgba(0,0,0,.5); min-width: 220px; }
+           border-radius: 10px; padding: 12px 14px; box-shadow: 0 10px 30px rgba(0,0,0,.5); min-width: 250px; max-width: 290px; }
   .panel[hidden] { display: none; }
+  .tog { display: flex; gap: 10px; align-items: center; color: var(--ink); font-size: .9rem; cursor: pointer; }
+  .tog input { width: 22px; height: 22px; accent-color: var(--accent); flex: none; }
   .panel h2 { margin: 14px 0 8px; }
   .panel h2:first-child { margin-top: 0; }
   h1 { margin: 0; font-size: 1.3rem; letter-spacing: .04em; font-weight: 600; }
@@ -106,6 +109,7 @@
   @media (max-width: 760px) {
     main { grid-template-columns: 1fr; padding-bottom: 210px; }
     aside { grid-column: 1; grid-row: auto; }
+    .top h1 span { display: none; }
     /* Zarlar ve ZAR AT ekranın altına sabit: sonuç hep görünür, kaydırmak gerekmez */
     #dice { position: fixed; left: 0; right: 0; bottom: calc(96px + env(safe-area-inset-bottom)); z-index: 20;
             display: grid; grid-template-columns: repeat(7, 1fr); gap: 2px; padding: 8px 6px 4px;
@@ -138,6 +142,8 @@
         <div class="swatches" id="swBody" role="group" aria-label="Zar rengi"></div>
         <h2>Yazı rengi</h2>
         <div class="swatches" id="swInk" role="group" aria-label="Yazı rengi"></div>
+        <h2>Atış</h2>
+        <label class="tog"><input type="checkbox" id="quick"> Hızlı atış: zara dokununca hemen at</label>
         </div>
     </div>
   </header>
@@ -217,6 +223,7 @@ const SHAPES = {
 const pool = {};          // { sides: count }
 let mode = 'norm';
 let sign = 1;
+let quick = localStorage.getItem('zarHizli') === '1';   // hızlı atış: zara dokununca hemen at
 const $ = id => document.getElementById(id);
 const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
 
@@ -242,7 +249,16 @@ SIDES.forEach(s => {
     lpTimer = setTimeout(() => { lpDone = Date.now(); dec(s); if (navigator.vibrate) navigator.vibrate(15); }, 480);
   });
   ['pointerup', 'pointerleave', 'pointercancel'].forEach(t => b.addEventListener(t, () => clearTimeout(lpTimer)));
-  b.onclick = () => { if (Date.now() - lpDone < 700) return; pool[s] = (pool[s] || 0) + 1; render(); };
+  b.onclick = () => {
+    if (Date.now() - lpDone < 700) return;
+    if (quick) {                                   // hızlı atış: yalnız bu zar, hemen at
+      if (busy) return;
+      for (const k in pool) delete pool[k];
+      $('expr').value = ''; pool[s] = 1; render(); doRoll();
+      return;
+    }
+    pool[s] = (pool[s] || 0) + 1; render();
+  };
   b.oncontextmenu = e => { e.preventDefault(); if (Date.now() - lpDone > 700) dec(s); };
   b.onkeydown = e => { if (e.key === 'Backspace' || e.key === 'Delete') dec(s); };
   diceEl.appendChild(b);
@@ -790,6 +806,8 @@ mkSwatches('swatches', TABLES, () => tableKey, k => { tableKey = k; localStorage
 mkSwatches('swBody', BODIES, () => bodyKey, k => { bodyKey = k; localStorage.setItem('zarGovde', k); restyle(); }, 'Zar');
 mkSwatches('swInk', INKS, () => inkKey, k => { inkKey = k; localStorage.setItem('zarYazi', k); restyle(); }, 'Yazı');
 applyTable();
+$('quick').checked = quick;
+$('quick').onchange = () => { quick = $('quick').checked; localStorage.setItem('zarHizli', quick ? '1' : '0'); };
 const setBtn = $('setBtn'), setPanel = $('setPanel');
 function togglePanel(open) {
   setPanel.hidden = !open; setBtn.setAttribute('aria-expanded', String(open));
