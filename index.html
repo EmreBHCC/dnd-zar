@@ -430,7 +430,7 @@ function initStage() {
     return true;
   } catch (e) { console.warn('WebGL yok:', e); return false; }
 }
-const CDIR = V3(0, Math.sin(THREE.MathUtils.degToRad(58)), Math.cos(THREE.MathUtils.degToRad(58))).normalize();
+const CDIR = V3(0, Math.sin(THREE.MathUtils.degToRad(80)), Math.cos(THREE.MathUtils.degToRad(80))).normalize();
 const DT = 1 / 90, RC = 1, GRAV = -32;
 
 function trayFor(n) {
@@ -450,13 +450,13 @@ function buildRim(hx, hz) {
 }
 function fit() {
   const { hx, hz } = R, stage = $('stage'), w = stage.clientWidth || 300;
-  const halfW = hx + 1, halfD = hz + 1;
-  const h = Math.round(Math.min(560, Math.max(210, w * (halfD * 2 * .88 + 1.2) / (halfW * 2))));
+  const halfW = hx + .1, halfD = hz + .1;   // yalnız iç yüzey çerçeveye girer, kenarlar görünmez
+  const h = Math.round(Math.min(560, Math.max(210, w * (halfD * 2 * .985 + .3) / (halfW * 2))));
   stage.style.height = h + 'px';
   R.renderer.setSize(w, h);
   R.camera.aspect = w / h; R.camera.updateProjectionMatrix();
   const t = Math.tan(THREE.MathUtils.degToRad(17.5));
-  const z = Math.max(halfW / (t * R.camera.aspect), (halfD * .88 + .6) / t) * 1.03;
+  const z = Math.max(halfW / (t * R.camera.aspect), (halfD * .985 + .15) / t) * 1.0;
   R.camera.position.copy(CDIR).multiplyScalar(z);
   R.camera.lookAt(0, 0, 0);
   const span = Math.max(hx, hz) + 4, sc = keyLight.shadow.camera;
