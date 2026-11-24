@@ -811,6 +811,21 @@ function startLoop() {
   })(performance.now());
 }
 
+/* Açılışta masada tek d20 dinlenir (atılmaz): ekran boş kalmasın, d20 seçili gelsin */
+function idleDie() {
+  if (!initStage() || R.dice.length) return;
+  const { hx, hz } = trayFor(1);
+  R.hx = hx; R.hz = hz; buildRim(hx, hz); fit();
+  const d = makeDie(20, false), fr = d.frames[20];
+  const qTarget = new THREE.Quaternion().setFromRotationMatrix(new THREE.Matrix4().makeBasis(V3(1, 0, 0), V3(0, 0, -1), V3(0, 1, 0)));
+  d.qf = qTarget.clone().multiply(fr.q.clone().invert());
+  d.h = restHeight(d.geo, d.qf) + .002;
+  d.grp.position.set(0, d.h, 0); d.grp.quaternion.copy(d.qf);
+  d.done = true; d.it = { sides: 20 }; d.N = 1; d.P = new Float32Array([0, d.h, 0]);
+  R.scene.add(d.grp); R.dice.push(d);
+  R.renderer.render(R.scene, R.camera);
+}
+
 /* ---- hızlı atış: dokundukça zar atılır, 5 sn dokunulmazsa tek kayıt olarak geçmişe yazılır ---- */
 const QUICK_MS = 5000;
 function popTotal() { const t = $('total'); t.classList.remove('pop'); void t.offsetWidth; t.classList.add('pop'); }
@@ -1014,7 +1029,9 @@ function togglePanel(open) {
 setBtn.onclick = e => { e.stopPropagation(); togglePanel(setPanel.hidden); };
 document.addEventListener('click', e => { if (!setPanel.hidden && !setPanel.contains(e.target)) togglePanel(false); });
 addEventListener('keydown', e => { if (e.key === 'Escape' && !setPanel.hidden) { togglePanel(false); setBtn.focus(); } });
+pool[20] = 1;                                  // açılışta 1d20 seçili
 render(); drawHist();
+idleDie();
 </script>
 </body>
 </html>
