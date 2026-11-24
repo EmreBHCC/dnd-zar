@@ -522,7 +522,7 @@ function simulate(dice, hx, hz) {
   const N = Math.ceil(6.5 / DT);
   const S = dice.map((d, i) => {
     d.P = new Float32Array(N * 3); d.W = new Float32Array(N * 3);
-    return { d, st: i * 5, p: V3(-hx + RC + .1, rnd(3, 4.2), rnd(-hz + RC + .3, hz - RC - .3)), v: V3(0, 0, 0), w: V3(0, 0, 0), ground: false };
+    return { d, st: i * 5, p: V3(rnd(-hx + RC + .2, hx - RC - .2), rnd(3, 4.2), rnd(-hz + RC + .3, hz - RC - .3)), v: V3(0, 0, 0), w: V3(0, 0, 0), ground: false };
   });
   const lim = { x: hx - RC, z: hz - RC };
   let end = N;
@@ -531,7 +531,8 @@ function simulate(dice, hx, hz) {
     S.forEach(s => {
       if (k < s.st) return;
       if (k === s.st) {
-        s.v.set(rnd(13, 17), rnd(.5, 2), rnd(-3, 3));
+        const sp0 = rnd(4, 14), an = rnd(-Math.PI, Math.PI);   // farklı hız ve açı: zarlar masaya dağılır
+        s.v.set(sp0 * Math.cos(an), rnd(.5, 2), sp0 * Math.sin(an));
         s.w.set(rnd(-1, 1), rnd(-1, 1), rnd(-1, 1)).normalize().multiplyScalar(rnd(12, 20));
       }
       const p = s.p, v = s.v, w = s.w;
